@@ -112,7 +112,7 @@ class Lexer:
 
         char = self._advance()
 
-        # Single-character tokens (Runes)
+        # 1. Single-character tokens (Runes)
         if char == '|': return self._add_token(TOKENTYPE.RUNE_PIPE)
         if char == '$': return self._add_token(TOKENTYPE.RUNE_DOLLAR)
         if char == '@': return self._add_token(TOKENTYPE.RUNE_AT)
@@ -128,13 +128,12 @@ class Lexer:
         if char == '#': return self._add_token(TOKENTYPE.RUNE_HASH)
         if char == '\\': return self._add_token(TOKENTYPE.RUNE_BACKSLASH)
         if char == '/': return self._add_token(TOKENTYPE.RUNE_FORWARDSLASH)
-        if char == '"': return self._add_token(TOKENTYPE.RUNE_DOUBLEQUOTE)
+        if char == '"': return self._add_token(TOKENTYPE.RUNE_DOUBLE_QUOTE)
         if char == '%': return self._add_token(TOKENTYPE.RUNE_PERCENT)
         if char == '~': return self._add_token(TOKENTYPE.RUNE_TILDE)
-        # TODO: add more runes
 
         # 2. Identifiers (which include opcodes and labels)
-        #    Identifiers start with a letter or underscore.
+        #  Identifiers start with a letter or underscore.
         if char.isalpha() or char == '_':
             # Greedily consume all characters that can be part of an identifier
             # (alphanumeric, plus '_', '/', '-' based on Uxntal conventions)
@@ -189,7 +188,7 @@ def main():
     if args.file:
         with open(args.file, 'r') as asmfile:
             lines = asmfile.readlines()
-            lexer = Lexer(lines)
+            lexer = Lexer('\n'.join(lines))
             tokens = lexer.scan_all_tokens()
             for token in tokens:
                 token.print()
