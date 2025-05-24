@@ -103,8 +103,8 @@ class Lexer:
                 # Found a non-whitespace/non-comment char
                 break
 
-
     def scan_token(self) -> Token:
+        """Scan a single token."""
         self._skip_whitespace_and_comments()
         self.start = self.cursor
         if self._is_at_end():
@@ -120,27 +120,34 @@ class Lexer:
         if char == '#': return self._add_token(TOKENTYPE.RUNE_HASH)
         # TODO: add more runes
 
-        # Hex Literals (e.g., 10, cafe, 01)
-        # char already holds the first character of the potential literal
-        if '0' <= char.lower() <= '9' or 'a' <= char.lower() <= 'f':
-            # Keep peeking and advancing as long as characters are hex digits
+        # 2. Identifiers (which include opcodes and labels)
+        #    Identifiers start with a letter or underscore.
+        if char.isalpha() or char == '_':
+            # Greedily consume all characters that can be part of an identifier
+            # (alphanumeric, plus '_', '/', '-' based on Uxntal conventions)
             while not self._is_at_end() and \
-                  ('0' <= self._peek().lower() <= '9' or
+                  (self._peek().isalnum() or self._peek() in ['_', '/', '-']):
+                self._advance()
+            # Words like "Console", "error", "ADD", "BEEF", "C" will be tokenized as IDENTIFIER.
+            # The parser will later distinguish opcodes or attempt to parse "BEEF" or "C"
+            # as numbers if contextually appropriate.
+            return self._add_token(TOKENTYPE.IDENTIFIER)
+
+        # 3. Hex Literals (that explicitly start with a digit 0-9)
+        #    Uxntal numbers are hexadecimal by default.
+        if char.isdigit():
+            # Consume all subsequent characters that are valid hex digits (0-9, a-f, A-F)
+            while not self._is_at_end() and \
+                  ('0' <= self._peek().lower() <= '9' or \
                    'a' <= self._peek().lower() <= 'f'):
                 self._advance()
             return self._add_token(TOKENTYPE.HEX_LITERAL)
 
-        # Identifiers and Opcodes
-        if char.isalpha() or char == '_':
-            while (self._peek().isalnum() or
-                   self._peek() in ['_', '/', '-']):
-                self._advance()
-            return self._add_token(TOKENTYPE.IDENTIFIER)
-        # If none of the above, it's ILLEGAL (for now)
-        return self._add_token(TOKENTYPE.ILLEGAL)
-
+        # If none of the above matched the first character:
+        return self._add_token(TOKENTYPE.ILLEGAL, char)
 
     def scan_all_tokens(self) -> list[Token]:
+        """Scan all tokens in the lexer."""
         tokens = []
         while True:
             token = self.scan_token()
@@ -154,6 +161,7 @@ class Lexer:
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse command line arguments."""
     parser = argparse.ArgumentParser()
     parser.add_argument("file",
                         help="tal file to assemble")
@@ -161,13 +169,17 @@ def parse_args() -> argparse.Namespace:
     args = parser.parse_args()
     return args
 
+
 def main():
+    """Handle parsing args and calling assembler."""
     args = parse_args()
     if args.file:
         with open(args.file, 'r') as asmfile:
             lines = asmfile.readlines()
-    for line in lines:
-        print(line)
+            lexer = Lexer(lines)
+            tokens = lexer.scan_all_tokens()
+            for token in tokens:
+                token.print()
 
 
 if __name__ == "__main__":
