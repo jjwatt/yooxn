@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
+"""uxntal assembler."""
 import argparse
 
 from enum import Enum, auto
 
+
 class TOKENTYPE(Enum):
-    RUNE_PIPE = auto() # |
+    """Token Type."""
+
+    RUNE_PIPE = auto()  # |
     RUNE_DOLLAR = auto()
-    RUNE_AT = auto() # @
+    RUNE_AT = auto()  # @
     RUNE_AMPERSAND = auto()
     RUNE_COMMA = auto()
     RUNE_UNDERSCORE = auto()
@@ -232,7 +236,21 @@ class Parser:
         else:
             self.current_token = None
 
+    def _print_hex_literal_content(self, literal_content_word, op_size):
+        """Print out a hex literal token."""
+        lit = "LIT"
+        if op_size == 3:
+            lit = "LIT2"
+        print(f"  Literal Number ({lit} + value): #{literal_content_word},"
+              f"size: {op_size} bytes (Line {self.current_token.line})")
+
+    def _print_line_err(self, err):
+        """Print a line error."""
+        line_no = self.current_token.line if self.current_token else '??'
+        print(f"Error: Line {line_no}: {err}")
+
     def parse_pass1(self):
+        """Parse tokens Pass #1."""
         print("Starting parser pass 1")
         while (self.current_token is not None
                and self.current_token.type != TOKENTYPE.EOF):
@@ -247,27 +265,25 @@ class Parser:
                     self._advance()  # Consume hex literal
                 else:
                     # Error: expected address after |
-                    print(f"Error: Line "
-                          f"{self.current_token.line if self.current_token else '??'}: Expected address after '|'")
+                    self._print_line_err("Expected address after '|'")
                     # Potentially skip to next line or stop
                     # For simp;licity, stop on error
                     break
             elif token_type == TOKENTYPE.RUNE_AT:
-                self._advance() # Consume '@'
+                # Consume '@'
+                self._advance()
                 if self.current_token and self.current_token.type == TOKENTYPE.IDENTIFIER:
                     label_name = self.current_token.word
                     if label_name in self.symbol_table:
                         # Error: Duplicate label definition
-                        print(f"Error: Line {self.current_token.line}: Duplicate label '{label_name}'")
+                        self._print_line_err(f"Duplicate label '{label_name}'")
                     else:
                         self.symbol_table[label_name] = self.current_address
                         print(f"  Defined label '{label_name}' at 0x{self.current_address:04x}")
                     self._advance()
                 else:
                     # Error: Expected label name after @
-                    error_line = self.current_token.line if self.current_token else '??'
-                    print(f"Error: "
-                          f"Line {error_line}: Expected label name after '@'")
+                    self._print_line_err("Expected label name after '@'")
                     break
 
             elif token_type == TOKENTYPE.RAW_ASCII_CHUNK:
@@ -290,22 +306,19 @@ class Parser:
                     op_size = 0
                     # Should not happen if lexer is correct
                     if literal_len == 0:
-                        print(f"Error: Line {self.current_token.line}:"
-                              f"Emtpy hex literal after #")
+                        self._print_line_err("Empty hex literal after #")
                     # 1-byte value
                     elif literal_len <= 2:
                         # 1 byte for LIT opcode + 1 byte for value (e.g., #1, #0f, #ab)
                         op_size = 2
-                        self.print_content_and_line(literal_content_word,
-                                               op_size,
-                                               self.current_token.line)
+                        self._print_hex_literal_content(literal_content_word,
+                                                        op_size)
                     # 2-byte value
                     elif literal_len <= 4:
                         # 1 byte for LIT2 opcode + 2 bytes for value (e.g., #123, #abcd)
                         op_size = 3
-                        self.print_content_and_line(literal_content_word,
-                                               op_size,
-                                               self.current_token.line)
+                        self._print_hex_literal_content(literal_content_word,
+                                                        op_size)
                     else:
                         print("Error: Line %s: Hex Literal '%s' is too long"
                               % (self.current_token.line,
