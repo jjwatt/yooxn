@@ -48,7 +48,17 @@ class Token:
 
 
 class Lexer:
+    """Lexer for uxntal."""
+
     def __init__(self, source: str):
+        """Initialize a lexer.
+
+        Args:
+            src - str - The source code.
+
+        Return:
+            A new lexer object.
+        """
         self.src = source
         self.size = len(source)
         # Current position in the input
@@ -81,6 +91,7 @@ class Lexer:
         return Token(typ, word, self.line)
 
     def _skip_whitespace_and_comments(self):
+        """Skip whitespace and comments in the tokenizer."""
         while not self._is_at_end():
             char = self._peek()
             if char in ' \t\r':
@@ -177,7 +188,16 @@ class Lexer:
 
 
 class Parser:
+    """A parser for uxntal.
+
+    Uses Tokens from the Lexer.
+    """
+
     def __init__(self, tokens: list[Token]):
+        """Initialize a new parser object.
+
+        tokens: A list of Tokens.
+        """
         self.tokens = tokens
         self.token_idx = 0
         self.current_token: Token | None = None
@@ -188,6 +208,13 @@ class Parser:
         # Start at 0. Uxn ROMs will usually set this to 0x0100
         self.current_address = 0x0000
         self.rom_bytes = bytearray()
+
+    def _advance(self):
+        self.token += 1
+        if self.token_idx < len(self.tokens):
+            self.current_token = self.tokens[self.token_idx]
+        else:
+            self.current_token = None
 
 
 def parse_args() -> argparse.Namespace:
