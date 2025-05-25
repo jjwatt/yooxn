@@ -271,6 +271,7 @@ class Parser:
                     break
 
             elif token_type == TOKENTYPE.RAW_ASCII_CHUNK:
+                # Handle ASCII Chunks. e.g., "Hello
                 chunk_content = self.current_token.word
                 chunk_size = len(chunk_content)
                 print(f"  Raw ASCII Chunk: \"{chunk_content}\", "
@@ -279,6 +280,40 @@ class Parser:
                 self.current_address += chunk_size
                 # Consume RAW_ASCII_CHUNK token
                 self._advance()
+
+            # Handle #LITERAL (LIT/LIT2 opcodes + data)
+            elif token_type == TOKENTYPE.RUNE_HASH:
+                self._advance()
+                if self.current_token and self.current_token.type ==TOKENTYPE.HEX_LITERAL:
+                    literal_content_word = self.current_token.word
+                    literal_len = len(literal_content_word)
+                    op_size = 0
+                    # Should not happen if lexer is correct
+                    if literal_len == 0:
+                        print(f"Error: Line {self.current_token.line}:"
+                              f"Emtpy hex literal after #")
+                    # 1-byte value
+                    elif literal_len <= 2:
+                        # 1 byte for LIT opcode + 1 byte for value (e.g., #1, #0f, #ab)
+                        op_size = 2
+                        self.print_content_and_line(literal_content_word,
+                                               op_size,
+                                               self.current_token.line)
+                    # 2-byte value
+                    elif literal_len <= 4:
+                        # 1 byte for LIT2 opcode + 2 bytes for value (e.g., #123, #abcd)
+                        op_size = 3
+                        self.print_content_and_line(literal_content_word,
+                                               op_size,
+                                               self.current_token.line)
+                    else:
+                        print("Error: Line %s: Hex Literal '%s' is too long"
+                              % (self.current_token.line,
+                                 literal_content_word))
+                        break
+                    self.current_address += op_size
+                    # Consume HEX_LITERAL token
+                    self._advance()
 
             # Placeholder for other tokens: For now, just advance past them for Pass 1.
             # In a real Pass 1, you'd calculate their size and increment current_address.
