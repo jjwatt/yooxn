@@ -210,11 +210,70 @@ class Parser:
         self.rom_bytes = bytearray()
 
     def _advance(self):
-        self.token += 1
+        self.token_idx += 1
         if self.token_idx < len(self.tokens):
             self.current_token = self.tokens[self.token_idx]
         else:
             self.current_token = None
+
+    def parse_pass1(self):
+        print("Starting parser pass 1")
+        while (self.current_token is not None
+               and self.current_token.type != TOKENTYPE.EOF):
+            token_type = self.current_token.type
+            if token_type == TOKENTYPE.RUNE_PIPE:
+                self._advance()  # Consume |
+                if self.current_token and self.current_token.type == TOKENTYPE.HEX_LITERAL:
+                    # Convert hex string to integer
+                    address = int(self.current_token.word, 16)
+                    print(f'    Padding to address 0x{address:04x}')
+                    self.current_address = address
+                    self._advance()  # Consume hex literal
+                else:
+                    # Error: expected address after |
+                    print(f"Error: Line "
+                          f"{self.current_token.line if self.current_token else '??'}: Expected address after '|'")
+                    # Potentially skip to next line or stop
+                    # For simp;licity, stop on error
+                    break
+            elif token_type == TOKENTYPE.RUNE_AT:
+                self._advance() # Consume '@'
+                if self.current_token and self.current_token.type == TOKENTYPE.IDENTIFIER:
+                    label_name = self.current_token.word
+                    if label_name in self.symbol_table:
+                        # Error: Duplicate label definition
+                        print(f"Error: Line {self.current_token.line}: Duplicate label '{label_name}'")
+                    else:
+                        self.symbol_table[label_name] = self.current_address
+                        print(f"  Defined label '{label_name}' at 0x{self.current_address:04x}")
+                    self._advance() # Consume identifier
+                else:
+                    # Error: Expected label name after @
+                    print(f"Error: Line {self.current_token.line if self.current_token else '??'}: Expected label name after '@'")
+                    break
+
+            # Placeholder for other tokens: For now, just advance past them for Pass 1.
+            # In a real Pass 1, you'd calculate their size and increment current_address.
+            # For example, an opcode IDENTIFIER might take 1 byte.
+            # LIT #12 would take 2 bytes (LIT + #12).
+            # LIT #1234 would take 3 bytes (LIT + #1234).
+            # Your ";hello-word" would expand to LIT2 #address, taking 3 bytes.
+            # The Console definitions like &vector $2 also increment current_address.
+            else:
+                # For now, let's just assume every other recognized token takes up 1 byte
+                # This is a VAST oversimplification but helps test label/padding.
+                # You'll refine this later.
+                if token_type not in [TOKENTYPE.EOF]: # Add other non-byte tokens if any
+                     # print(f"  (Skipping/counting token {self.current_token.word} - type {token_type} - advancing PC by 1 (placeholder))")
+                     # self.current_address += 1 # Placeholder increment
+                     pass # Let's not increment PC for unknown tokens yet to keep it simple
+                self._advance() # Consume the current token
+
+        print("Parser Pass 1 Finished.")
+        print("Symbol Table:")
+        for label, address in self.symbol_table.items():
+            print(f"  {label}: 0x{address:04x}")
+        print(f"Final Calculated Address (approx): 0x{self.current_address:04x}")
 
 
 def parse_args() -> argparse.Namespace:
@@ -237,6 +296,12 @@ def main():
             tokens = lexer.scan_all_tokens()
             for token in tokens:
                 token.print()
+
+            if tokens and tokens[-1].type != TOKENTYPE.ILLEGAL:
+                parser = Parser(tokens)
+                parser.parse_pass1()
+            else:
+                print("Lexer failed. Parsing skipped.")
 
 
 if __name__ == "__main__":
