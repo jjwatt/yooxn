@@ -22,6 +22,10 @@ class TOKENTYPE(Enum):
     RUNE_DOUBLE_QUOTE = auto()
     RUNE_PERCENT = auto()
     RUNE_TILDE = auto()
+    RUNE_LBRACE = auto()
+    RUNE_RBRACE = auto()
+    RUNE_LBRACKET = auto()
+    RUNE_RBRACKET = auto()
     LPAREN = auto ()
     RPAREN = auto()
     HEX_LITERAL = auto()
@@ -146,6 +150,10 @@ class Lexer:
             case '"': return self._add_token(TOKENTYPE.RUNE_DOUBLE_QUOTE)
             case '%': return self._add_token(TOKENTYPE.RUNE_PERCENT)
             case '~': return self._add_token(TOKENTYPE.RUNE_TILDE)
+            case '{': return self._add_token(TOKENTYPE.RUNE_RBRACKET)
+            case '}': return self._add_token(TOKENTYPE.RUNE_LBRACKET)
+            case '[': return self._add_token(TOKENTYPE.RUNE_LBRACE)
+            case ']': return self._add_token(TOKENTYPE.RUNE_RBRACE)
 
             case c if c.isalpha():
                 # Greedily consume all characters that can be part of an
