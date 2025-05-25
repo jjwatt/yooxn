@@ -26,13 +26,14 @@ class TOKENTYPE(Enum):
     RUNE_RBRACE = auto()
     RUNE_LBRACKET = auto()
     RUNE_RBRACKET = auto()
-    LPAREN = auto ()
+    LPAREN = auto()
     RPAREN = auto()
     HEX_LITERAL = auto()
     IDENTIFIER = auto()
     WHITESPACE = auto()
     NEWLINE = auto()
     COMMENT = auto()
+    RAW_ASCII_CHUNK = auto()
     EOF = auto()
     ILLEGAL = auto()
 
@@ -89,10 +90,10 @@ class Lexer:
             return '\0'
         return self.src[self.cursor + 1]
 
-    def _add_token(self, typ: TOKENTYPE, word: str | None = None):
+    def _add_token(self, token_type: TOKENTYPE, word: str | None = None):
         if word is None:
             word = self.src[self.start:self.cursor]
-        return Token(typ, word, self.line)
+        return Token(token_type, word, self.line)
 
     def _skip_whitespace_and_comments(self):
         """Skip whitespace and comments in the tokenizer."""
@@ -147,13 +148,20 @@ class Lexer:
             case '#': return self._add_token(TOKENTYPE.RUNE_HASH)
             case '\\': return self._add_token(TOKENTYPE.RUNE_BACKSLASH)
             case '/': return self._add_token(TOKENTYPE.RUNE_FORWARDSLASH)
-            case '"': return self._add_token(TOKENTYPE.RUNE_DOUBLE_QUOTE)
             case '%': return self._add_token(TOKENTYPE.RUNE_PERCENT)
             case '~': return self._add_token(TOKENTYPE.RUNE_TILDE)
             case '{': return self._add_token(TOKENTYPE.RUNE_RBRACKET)
             case '}': return self._add_token(TOKENTYPE.RUNE_LBRACKET)
             case '[': return self._add_token(TOKENTYPE.RUNE_LBRACE)
             case ']': return self._add_token(TOKENTYPE.RUNE_RBRACE)
+
+            case '"':
+                self.start = self.cursor
+                while not self._is_at_end():
+                    if self._peek().isspace():
+                        break
+                    self._advance()
+                return self._add_token(TOKENTYPE.RAW_ASCII_CHUNK)
 
             case c if c.isalpha():
                 # Greedily consume all characters that can be part of an
@@ -254,11 +262,23 @@ class Parser:
                     else:
                         self.symbol_table[label_name] = self.current_address
                         print(f"  Defined label '{label_name}' at 0x{self.current_address:04x}")
-                    self._advance() # Consume identifier
+                    self._advance()
                 else:
                     # Error: Expected label name after @
-                    print(f"Error: Line {self.current_token.line if self.current_token else '??'}: Expected label name after '@'")
+                    error_line = self.current_token.line if self.current_token else '??'
+                    print(f"Error: "
+                          f"Line {error_line}: Expected label name after '@'")
                     break
+
+            elif token_type == TOKENTYPE.RAW_ASCII_CHUNK:
+                chunk_content = self.current_token.word
+                chunk_size = len(chunk_content)
+                print(f"  Raw ASCII Chunk: \"{chunk_content}\", "
+                      f"size: {chunk_size} bytes"
+                      f"  Line: {self.current_token.line}")
+                self.current_address += chunk_size
+                # Consume RAW_ASCII_CHUNK token
+                self._advance()
 
             # Placeholder for other tokens: For now, just advance past them for Pass 1.
             # In a real Pass 1, you'd calculate their size and increment current_address.
