@@ -223,6 +223,35 @@ class Lexer:
         return tokens
 
 
+class ParsingError(Exception):
+    """Base class for errors during parsing."""
+
+    def __init__(self, message, line=None, word=None, token=None):
+        """Initialize a ParsingError."""
+        super().__init__(message)
+        self.line = line
+        self.word = word
+        self.token = token
+        if token and line is None:
+            self.line = token.line
+        if token and word is None:
+            self.word = token.word
+
+    def __str__(self):
+        """Get string version of a ParsingError."""
+        line_info = f' (Line {self.line})' if self.line is not None else ''
+        word_info = f', Token "{self.word}"' if self.word is not None else ''
+        return f'Parse Error{line_info}{word_info}: {super().__str__()}'
+
+
+class FatalParsingError(ParsingError):
+    """An error that halts the current parsing pass."""
+
+
+class SyntaxError(ParsingError):
+    """A syntax error found in the parser."""
+
+
 class Parser:
     """A parser for uxntal.
 
@@ -266,6 +295,8 @@ class Parser:
         logger.error(f"Error: Line {line_no}: {err}")
 
     def _handle_absolute_padding(self):
+        # The '|' token
+        directive_token = self.current_token
         # Consume '|'
         self._advance()
         current_token = self.current_token
@@ -279,14 +310,13 @@ class Parser:
                 self.current_address = address
                 # Consume hex literal
                 self._advance()
-                return True
             except ValueError:
                 current_word = self.current_token.word
-                self._log_err(f"Invalid hex address {current_word} for '|'")
-                return False
+                msg = f"Invalid hex address '{current_word}' for '|'"
+                raise SyntaxError(msg, token=directive_token)
         else:
-            self._log_err("Expected address after '|'")
-            return False
+            msg = "Expected address (HEX_LITERAL) after '|'"
+            raise SyntaxError(msg, token=directive_token)
 
     def _handle_raw_ascii_chunk(self):
         """Handle RAW_ASCII_CHUNK."""
@@ -298,7 +328,6 @@ class Parser:
                      f" Line: {self.current_token.line}")
         self.current_address += size
         self._advance()
-        return True
 
     def parse_pass1(self):
         """Parse tokens Pass #1."""
