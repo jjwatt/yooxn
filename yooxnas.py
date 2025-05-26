@@ -327,7 +327,7 @@ class Parser:
                     self.current_address += op_size
                     # Consume HEX_LITERAL token
                     self._advance()
-            elif TOKENTYPE.HEX_LITERAL:
+            elif token_type == TOKENTYPE.HEX_LITERAL:
                 data_content_word = self.current_token.word
                 data_len = len(data_content_word)
                 data_size = 0
@@ -340,6 +340,10 @@ class Parser:
                     data_size = 2
                 else:
                     self._print_line_err(f"Error raw hex data is too long: {data_len}.")
+                    print("Diagnostics: "
+                          f"data_content_word: {data_content_word}\n"
+                          f"current_address: {self.current_address}\n"
+                          f"current_token: {self.current_token.print()}\n")
                     break
                 print(f"  Raw Hex Data Byte(s): {data_content_word}, size: {data_size} bytes (Line {self.current_token.line})")
                 self.current_address += data_size
