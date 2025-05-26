@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 """uxntal assembler."""
 import argparse
+import logging
 
 from enum import Enum, auto
+
+logging.basicConfig(level=logging.DEBUG,
+                    format="%(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
 
 
 class TOKENTYPE(Enum):
@@ -97,8 +102,8 @@ class Lexer:
     def _add_token(self, token_type: TOKENTYPE, word: str | None = None):
         if word is None:
             word = self.src[self.start:self.cursor]
-        print(f"LEXER_DEBUG: Creating Token: Type={token_type.name},"
-              f"Word='{word}', Line={self.line}, Cursor={self.cursor}")
+        logger.debug(f"LEXER: Creating Token: Type={token_type.name},"
+                     f"Word='{word}', Line={self.line}, Cursor={self.cursor}")
         return Token(token_type, word, self.line)
 
     def _skip_whitespace_and_comments(self):
@@ -108,9 +113,9 @@ class Lexer:
             if char in ' \t\r':
                 self._advance()
             elif char == '\n':
-                print(f"LEXER_DEBUG: Newline char encountered. "
-                      f"Advancing line from {self.line} to {self.line + 1}. "
-                      f"Cursor: {self.cursor}")
+                logger.debug(f"LEXER: Newline char encountered. "
+                             f"Advancing line from {self.line} to {self.line + 1}. "
+                             f"Cursor: {self.cursor}")
                 self.line += 1
                 self._advance()
             # Start block comment
@@ -126,7 +131,7 @@ class Lexer:
                     self._advance()
                 else:
                     # TODO: Handle unclosed comment
-                    print(f"Warning: unclosed comment on line {self.line}")
+                    logger.warning(f"Warning: unclosed comment on line {self.line}")
             else:
                 # Found a non-whitespace/non-comment char
                 break
@@ -212,8 +217,8 @@ class Lexer:
             if token.type == TOKENTYPE.EOF:
                 break
             if token.type == TOKENTYPE.ILLEGAL:
-                print(f"Error: Illegal token '{token.word}'"
-                      f"on line '{token.line}'")
+                logger.error(f"Error: Illegal token '{token.word}'"
+                             f"on line '{token.line}'")
                 # break
         return tokens
 
@@ -247,22 +252,34 @@ class Parser:
         else:
             self.current_token = None
 
-    def _print_hex_literal_content(self, literal_content_word, op_size):
+    def _log_hex_literal_content(self, content, op_size):
         """Print out a hex literal token."""
         lit = "LIT"
         if op_size == 3:
             lit = "LIT2"
-        print(f"  Literal Number ({lit} + value): #{literal_content_word},"
-              f"size: {op_size} bytes (Line {self.current_token.line})")
+        logger.debug(f"Literal Number ({lit} + value): #{content},"
+                     f"size: {op_size} bytes (Line {self.current_token.line})")
 
-    def _print_line_err(self, err):
+    def _log_line_err(self, err):
         """Print a line error."""
         line_no = self.current_token.line if self.current_token else '??'
-        print(f"Error: Line {line_no}: {err}")
+        logger.error(f"Error: Line {line_no}: {err}")
+
+    def _handle_raw_ascii_chunk(self):
+        """Handle RAW_ASCII_CHUNK."""
+        token = self.current_token
+        content = token.word
+        size = len(content)
+        logger.debug(f"Raw ASCII Chunk: \"{content}\", "
+                     f"size: {size} bytes"
+                     f" Line: {self.current_token.line}")
+        self.current_address += size
+        self._advance()
+        return True
 
     def parse_pass1(self):
         """Parse tokens Pass #1."""
-        print("Starting parser pass 1")
+        logger.debug("Starting parser pass 1")
         while (self.current_token is not None
                and self.current_token.type != TOKENTYPE.EOF):
             token_type = self.current_token.type
@@ -271,13 +288,13 @@ class Parser:
                 if self.current_token and self.current_token.type == TOKENTYPE.HEX_LITERAL:
                     # Convert hex string to integer
                     address = int(self.current_token.word, 16)
-                    print(f'    Padding to address 0x{address:04x} '
-                          f'(Line {self.current_token.line})')
+                    logger.debug(f'Padding to address 0x{address:04x} '
+                                 f'(Line {self.current_token.line})')
                     self.current_address = address
                     self._advance()  # Consume hex literal
                 else:
                     # Error: expected address after |
-                    self._print_line_err("Expected address after '|'")
+                    self._log_line_err("Expected address after '|'")
                     # Potentially skip to next line or stop
                     # For simp;licity, stop on error
                     break
@@ -288,26 +305,19 @@ class Parser:
                     label_name = self.current_token.word
                     if label_name in self.symbol_table:
                         # Error: Duplicate label definition
-                        self._print_line_err(f"Duplicate label '{label_name}'")
+                        self._log_line_err(f"Duplicate label '{label_name}'")
                     else:
                         self.symbol_table[label_name] = self.current_address
-                        print(f"  Defined label '{label_name}' at 0x{self.current_address:04x}")
+                        logger.debug(f"Defined label '{label_name}'"
+                                     f"at 0x{self.current_address:04x}")
                     self._advance()
                 else:
                     # Error: Expected label name after @
-                    self._print_line_err("Expected label name after '@'")
+                    self._log_line_err("Expected label name after '@'")
                     break
 
             elif token_type == TOKENTYPE.RAW_ASCII_CHUNK:
-                # Handle ASCII Chunks. e.g., "Hello
-                chunk_content = self.current_token.word
-                chunk_size = len(chunk_content)
-                print(f"  Raw ASCII Chunk: \"{chunk_content}\", "
-                      f"size: {chunk_size} bytes"
-                      f"  Line: {self.current_token.line}")
-                self.current_address += chunk_size
-                # Consume RAW_ASCII_CHUNK token
-                self._advance()
+                self._handle_raw_ascii_chunk()
 
             # Handle #LITERAL (LIT/LIT2 opcodes + data)
             elif token_type == TOKENTYPE.RUNE_HASH:
@@ -318,23 +328,22 @@ class Parser:
                     op_size = 0
                     # Should not happen if lexer is correct
                     if literal_len == 0:
-                        self._print_line_err("Empty hex literal after #")
+                        self._log_line_err("Empty hex literal after #")
                     # 1-byte value
                     elif literal_len <= 2:
                         # 1 byte for LIT opcode + 1 byte for value (e.g., #1, #0f, #ab)
                         op_size = 2
-                        self._print_hex_literal_content(literal_content_word,
-                                                        op_size)
+                        self._log_hex_literal_content(literal_content_word,
+                                                      op_size)
                     # 2-byte value
                     elif literal_len <= 4:
                         # 1 byte for LIT2 opcode + 2 bytes for value (e.g., #123, #abcd)
                         op_size = 3
-                        self._print_hex_literal_content(literal_content_word,
-                                                        op_size)
+                        self._log_hex_literal_content(literal_content_word,
+                                                      op_size)
                     else:
-                        print("Error: Line %s: Hex Literal '%s' is too long"
-                              % (self.current_token.line,
-                                 literal_content_word))
+                        self._log_line_err("Hex Literal %s is too long",
+                                           literal_content_word)
                         break
                     self.current_address += op_size
                     # Consume HEX_LITERAL token
@@ -344,20 +353,25 @@ class Parser:
                 data_len = len(data_content_word)
                 data_size = 0
                 if data_len == 0:
-                    self._print_line_err("Empty raw hex data.")
+                    self._log_line_err("Empty raw hex data.")
                     break
                 elif data_len <= 2:
                     data_size = 1
                 elif data_len <= 4:
                     data_size = 2
                 else:
-                    self._print_line_err(f"Error raw hex data is too long: {data_len}.")
-                    print("Diagnostics: "
-                          f"data_content_word: {data_content_word}\n"
-                          f"current_address: {self.current_address}\n"
-                          f"current_token: {self.current_token.print()}\n")
+                    self._log_line_err(f"Error raw hex data is too long: {data_len}.")
+                    logger.debug("Diagnostics: ")
+                    logger.debug("\tdata_content_word: %s", data_content_word)
+                    logger.debug("\tcurrent_address: %s", self.current_address)
+                    logger.debug("\tcurrent_token: %s",
+                                 self.current_token.print())
                     break
-                print(f"  Raw Hex Data Byte(s): {data_content_word}, size: {data_size} bytes (Line {self.current_token.line})")
+                logger.debug("\tRaw Hex Data Byte(s): %s,"
+                             "size: %s bytes (Line %s)",
+                             data_content_word,
+                             data_size,
+                             self.current_token.line)
                 self.current_address += data_size
                 # Consume the HEX_LITERAL
                 self._advance()
@@ -379,11 +393,12 @@ class Parser:
                      pass # Let's not increment PC for unknown tokens yet to keep it simple
                 self._advance() # Consume the current token
 
-        print("Parser Pass 1 Finished.")
-        print("Symbol Table:")
+        logger.debug("Parser Pass 1 Finished.")
+        logger.debug("Symbol Table:")
         for label, address in self.symbol_table.items():
-            print(f"  {label}: 0x{address:04x}")
-        print(f"Final Calculated Address (approx): 0x{self.current_address:04x}")
+            logger.debug(f"\t {label}: 0x{address:04x}")
+        logger.debug(f"Final Calculated Address (approx)"
+                     f": 0x{self.current_address:04x}")
 
 
 def parse_args() -> argparse.Namespace:
