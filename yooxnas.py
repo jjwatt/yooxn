@@ -327,6 +327,28 @@ class Parser:
                     self.current_address += op_size
                     # Consume HEX_LITERAL token
                     self._advance()
+            elif token_type == TOKENTYPE.HEX_LITERAL:
+                data_content_word = self.current_token.word
+                data_len = len(data_content_word)
+                data_size = 0
+                if data_len == 0:
+                    self._print_line_err("Empty raw hex data.")
+                    break
+                elif data_len <= 2:
+                    data_size = 1
+                elif data_len <= 4:
+                    data_size = 2
+                else:
+                    self._print_line_err(f"Error raw hex data is too long: {data_len}.")
+                    print("Diagnostics: "
+                          f"data_content_word: {data_content_word}\n"
+                          f"current_address: {self.current_address}\n"
+                          f"current_token: {self.current_token.print()}\n")
+                    break
+                print(f"  Raw Hex Data Byte(s): {data_content_word}, size: {data_size} bytes (Line {self.current_token.line})")
+                self.current_address += data_size
+                # Consume the HEX_LITERAL
+                self._advance()
 
             # Placeholder for other tokens: For now, just advance past them for Pass 1.
             # In a real Pass 1, you'd calculate their size and increment current_address.
