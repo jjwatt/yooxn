@@ -126,6 +126,12 @@ class Lexer:
                 # Found a non-whitespace/non-comment char
                 break
 
+    def _is_identifier_char(self, char: str) -> bool:
+        return char.isalnum() or char in ['_', '/', '-']
+
+    def _is_hex_digit(self, char: str) -> bool:
+        return ('0' <= char.lower() <= '9' or 'a' <= char.lower() <= 'f')
+
     def scan_token(self) -> Token:
         """Scan a single token."""
         self._skip_whitespace_and_comments()
