@@ -1,7 +1,7 @@
-
 |10 @Console &vector $2 &read $1 &pad $5 &write $1 &error $1
 
 |0100 ( -> )
+
 
 	;hello-word print-text
 	#800f DEO
