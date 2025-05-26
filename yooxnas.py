@@ -339,8 +339,15 @@ class Parser:
                               " for parent '%s'." % parent_label_name,
                               token=ampersand_token)
         sub_label_token = self.current_token
-        # TODO: define sub_label_name, full_sub_label_name
-        # TODO: add to symbol table or warn on duplicates
+        sub_label_name = sub_label_token.word
+        full_sub_label_name = f'{parent_label_name}/{sub_label_name}'
+        if full_sub_label_name in self.symbol_table:
+            logger.warn("Duplicate sub-label: %s", full_sub_label_name)
+            # raise SyntaxError()
+        else:
+            self.symbol_table[full_sub_label_name] = self.current_address
+            logger.debug(f"  Defined sub-label '{full_sub_label_name}'"
+                         f" at 0x{self.current_address}")
         # Consume sub-label identifier
         self._advance()
         if not (self.current_token
