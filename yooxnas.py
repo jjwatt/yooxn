@@ -329,6 +329,88 @@ class Parser:
         self.current_address += size
         self._advance()
 
+    def _handle_sub_label_field(self, parent_label_name: str):
+        ampersand_token = self.current_token
+        # Consume '&'
+        self._advance()
+        if not (self.current_token
+                and self.current_token.type == TOKENTYPE.IDENTIFIER):
+            raise SyntaxError("Expected sub-label name after '&'"
+                              " for parent '%s'." % parent_label_name,
+                              token=ampersand_token)
+        sub_label_token = self.current_token
+        # TODO: define sub_label_name, full_sub_label_name
+        # TODO: add to symbol table or warn on duplicates
+        # Consume sub-label identifier
+        self._advance()
+        if not (self.current_token
+                and self.current_token.type == TOKENTYPE.RUNE_DOLLAR):
+            raise SyntaxError("Expected '$' after sub-label",
+                              token=sub_label_token)
+        dollar_token = self.current_token
+        # Consume '$'
+        self._advance()
+        if not (self.current_token
+                and self.current_token.type == TOKENTYPE.HEX_LITERAL):
+            raise SyntaxError("Expected size (HEX_LITERAL) after '$'",
+                              token=dollar_token)
+        size_hex_token = self.current_token
+        try:
+            size = int(size_hex_token.word, 16)
+            if size < 0:
+                raise ValueError("Size cannot be negative.")
+        except ValueError:
+            raise SyntaxError("Invalid size %s for sub-label %s" % (
+                size_hex_token.word, sub_label_token.word),
+                              token=size_hex_token)
+        logger.debug("    Sub-label '%s/%s' field occupies %s byte(s).",
+                     parent_label_name, sub_label_token.word, size)
+        logger.debug("       Advancing PC.")
+        self.current_address += size
+        self._advance()
+
+    def _handle_label_definition(self):
+        # For @
+        directive_token = self.current_token
+        # Consume '@'
+        self._advance()
+        if not (self.current_token
+                and self.current_token.type == TOKENTYPE.IDENTIFIER):
+            raise SyntaxError("Expected parent label name after '@'.",
+                              token=directive_token)
+        parent_label_token = self.current_token
+        parent_label_name = parent_label_token.word
+        if parent_label_name in self.symbol_table:
+            # TODO: write a custom warning function with line and label
+            logger.warning("Duplicate label: %s, Line %s",
+                           parent_label_name,
+                           parent_label_token.line)
+        else:
+            self.symbol_table[parent_label_name] = self.current_address
+            logger.debug(f'Define label "{parent_label_name}" at '
+                         f'0x{self.current_address:04x} '
+                         f'Line {parent_label_token.line}')
+        # Consume parent label identifier
+        self._advance()
+        while (self.current_token
+               and self.current_token.type == TOKENTYPE.RUNE_AMPERSAND):
+            self._handle_sub_label_field(parent_label_name)
+
+    def _handle_literal_number_directive(self):
+        raise NotImplementedError
+
+    def _handle_standalone_hex_data(self):
+        raise NotImplementedError
+
+    def _handle_identifier_or_opcode(self):
+        # Just get estimated size for now
+        op_token = self.current_token
+        logger.debug("Opcode/Identifier: '%s', (assuming 1 byte)"
+                     " (Line %s)",
+                     op_token.word, op_token.line)
+        self.current_address += 1
+        self._advance()
+
     def parse_pass1(self):
         """Parse tokens Pass #1."""
         logger.debug("Starting parser pass 1")
@@ -337,7 +419,6 @@ class Parser:
             return
         if self.current_token is None and self.tokens:
             self.current_token = self.tokens[0]
-
         try:
             while (self.current_token is not None
                    and self.current_token.type != TOKENTYPE.EOF):
@@ -359,7 +440,7 @@ class Parser:
                         logging.debug(' Skipping unhandled token: "%s"'
                                       ' type: %s (Line %s)',
                                       self.current_token.word,
-                                      self.token_type,
+                                      token_type,
                                       self.current_token.line)
                         self._advance()
 
