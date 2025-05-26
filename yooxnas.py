@@ -396,7 +396,7 @@ class Parser:
             self.symbol_table[parent_label_name] = self.current_address
             logger.debug(f'Define label "{parent_label_name}" at '
                          f'0x{self.current_address:04x} '
-                         f'Line {parent_label_token.line}')
+                         f'(Line {parent_label_token.line})')
         # Consume parent label identifier
         self._advance()
         while (self.current_token
@@ -404,10 +404,65 @@ class Parser:
             self._handle_sub_label_field(parent_label_name)
 
     def _handle_literal_number_directive(self):
-        raise NotImplementedError
+        # The '#' token
+        directive_token = self.current_token
+        # Consume '#'
+        self._advance()
+        if not (self.current_token
+                and self.current_token.type == TOKENTYPE.HEX_LITERAL):
+            raise SyntaxError("Expected hex literal after '#'",
+                              token=directive_token)
+        literal_token = self.current_token
+        literal_word = literal_token.word
+        literal_len = len(literal_word)
+        op_size = 0
+        if literal_len == 0:
+            raise SyntaxError("Empty hex literal after '#'.",
+                              token=directive_token)
+        elif literal_len <= 2:
+            op_size = 2
+            logger.debug("  Literal number (LIT + value): %s"
+                         " size: %s byte(s),"
+                         " (Line %s)",
+                         literal_word,
+                         op_size,
+                         directive_token.line)
+        elif literal_len <= 4:
+            op_size = 3
+            logger.debug("  Literal number (LIT2 + value): %s"
+                         " size: %s byte(s),"
+                         " (Line %s)",
+                         literal_word,
+                         op_size,
+                         directive_token.line)
+        else:
+            raise SyntaxError(f"Hex literal too long:"
+                              f" {literal_word}", token=literal_token)
 
     def _handle_standalone_hex_data(self):
-        raise NotImplementedError
+        # For hex literal as raw data
+        data_token = self.current_token
+        data_word = data_token.word
+        data_len = len(data_word)
+        data_size = 0
+        if data_len == 0:
+            raise SyntaxError("Empty raw hex data.",
+                              token=data_token)
+        elif data_len <= 2:
+            data_size = 1
+        elif data_len <= 4:
+            data_size = 2
+        else:
+            raise SyntaxError(f"Raw hex data {data_word} is too long",
+                              token=data_token)
+        logger.debug("  Raw Hex Data Byte(s): %s,"
+                     " size: %s"
+                     " (Line %s)",
+                     data_word,
+                     data_size,
+                     data_token.line)
+        self.current_address += data_size
+        self._advance()
 
     def _handle_identifier_or_opcode(self):
         # Just get estimated size for now
