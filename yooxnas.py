@@ -260,10 +260,33 @@ class Parser:
         logger.debug(f"Literal Number ({lit} + value): #{content},"
                      f"size: {op_size} bytes (Line {self.current_token.line})")
 
-    def _log_line_err(self, err):
+    def _log_err(self, err):
         """Print a line error."""
         line_no = self.current_token.line if self.current_token else '??'
         logger.error(f"Error: Line {line_no}: {err}")
+
+    def _handle_absolute_padding(self):
+        # Consume '|'
+        self._advance()
+        current_token = self.current_token
+        token_type = self.current_token.type
+        if current_token and token_type == TOKENTYPE.HEX_LITERAL:
+            try:
+                address = int(self.current_token.word, 16)
+                self.current_address = address
+                logger.debug(f'Padding to address 0x{address:04x} '
+                             f'(Line {self.current_token.line})')
+                self.current_address = address
+                # Consume hex literal
+                self._advance()
+                return True
+            except ValueError:
+                current_word = self.current_token.word
+                self._log_err(f"Invalid hex address {current_word} for '|'")
+                return False
+        else:
+            self._log_err("Expected address after '|'")
+            return False
 
     def _handle_raw_ascii_chunk(self):
         """Handle RAW_ASCII_CHUNK."""
@@ -284,19 +307,7 @@ class Parser:
                and self.current_token.type != TOKENTYPE.EOF):
             token_type = self.current_token.type
             if token_type == TOKENTYPE.RUNE_PIPE:
-                self._advance()  # Consume |
-                if self.current_token and self.current_token.type == TOKENTYPE.HEX_LITERAL:
-                    # Convert hex string to integer
-                    address = int(self.current_token.word, 16)
-                    logger.debug(f'Padding to address 0x{address:04x} '
-                                 f'(Line {self.current_token.line})')
-                    self.current_address = address
-                    self._advance()  # Consume hex literal
-                else:
-                    # Error: expected address after |
-                    self._log_line_err("Expected address after '|'")
-                    # Potentially skip to next line or stop
-                    # For simp;licity, stop on error
+                if not self._handle_absolute_padding():
                     break
             elif token_type == TOKENTYPE.RUNE_AT:
                 # Consume '@'
@@ -305,7 +316,7 @@ class Parser:
                     label_name = self.current_token.word
                     if label_name in self.symbol_table:
                         # Error: Duplicate label definition
-                        self._log_line_err(f"Duplicate label '{label_name}'")
+                        self._log_err(f"Duplicate label '{label_name}'")
                     else:
                         self.symbol_table[label_name] = self.current_address
                         logger.debug(f"Defined label '{label_name}'"
@@ -313,7 +324,7 @@ class Parser:
                     self._advance()
                 else:
                     # Error: Expected label name after @
-                    self._log_line_err("Expected label name after '@'")
+                    self._log_err("Expected label name after '@'")
                     break
 
             elif token_type == TOKENTYPE.RAW_ASCII_CHUNK:
@@ -328,7 +339,7 @@ class Parser:
                     op_size = 0
                     # Should not happen if lexer is correct
                     if literal_len == 0:
-                        self._log_line_err("Empty hex literal after #")
+                        self._log_err("Empty hex literal after #")
                     # 1-byte value
                     elif literal_len <= 2:
                         # 1 byte for LIT opcode + 1 byte for value (e.g., #1, #0f, #ab)
@@ -342,7 +353,7 @@ class Parser:
                         self._log_hex_literal_content(literal_content_word,
                                                       op_size)
                     else:
-                        self._log_line_err("Hex Literal %s is too long",
+                        self._log_err("Hex Literal %s is too long",
                                            literal_content_word)
                         break
                     self.current_address += op_size
@@ -353,14 +364,14 @@ class Parser:
                 data_len = len(data_content_word)
                 data_size = 0
                 if data_len == 0:
-                    self._log_line_err("Empty raw hex data.")
+                    self._log_err("Empty raw hex data.")
                     break
                 elif data_len <= 2:
                     data_size = 1
                 elif data_len <= 4:
                     data_size = 2
                 else:
-                    self._log_line_err(f"Error raw hex data is too long: {data_len}.")
+                    self._log_err(f"Error raw hex data is too long: {data_len}.")
                     logger.debug("Diagnostics: ")
                     logger.debug("\tdata_content_word: %s", data_content_word)
                     logger.debug("\tcurrent_address: %s", self.current_address)
