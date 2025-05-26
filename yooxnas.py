@@ -244,12 +244,16 @@ class ParsingError(Exception):
         return f'Parse Error{line_info}{word_info}: {super().__str__()}'
 
 
+class SyntaxError(ParsingError):
+    """A syntax error found in the parser."""
+
+
 class FatalParsingError(ParsingError):
     """An error that halts the current parsing pass."""
 
 
-class SyntaxError(ParsingError):
-    """A syntax error found in the parser."""
+class InternalParsingError(ParsingError):
+    """An internal parsing error."""
 
 
 class Parser:
@@ -350,31 +354,37 @@ class Parser:
                          f" at 0x{self.current_address}")
         # Consume sub-label identifier
         self._advance()
-        if not (self.current_token
-                and self.current_token.type == TOKENTYPE.RUNE_DOLLAR):
-            raise SyntaxError("Expected '$' after sub-label",
-                              token=sub_label_token)
-        dollar_token = self.current_token
-        # Consume '$'
-        self._advance()
-        if not (self.current_token
-                and self.current_token.type == TOKENTYPE.HEX_LITERAL):
-            raise SyntaxError("Expected size (HEX_LITERAL) after '$'",
-                              token=dollar_token)
-        size_hex_token = self.current_token
-        try:
-            size = int(size_hex_token.word, 16)
-            if size < 0:
-                raise ValueError("Size cannot be negative.")
-        except ValueError:
-            raise SyntaxError("Invalid size %s for sub-label %s" % (
-                size_hex_token.word, sub_label_token.word),
-                              token=size_hex_token)
-        logger.debug("    Sub-label '%s/%s' field occupies %s byte(s).",
-                     parent_label_name, sub_label_token.word, size)
-        logger.debug("       Advancing PC.")
-        self.current_address += size
-        self._advance()
+
+        # if not (self.current_token
+        #         and self.current_token.type == TOKENTYPE.RUNE_DOLLAR):
+        #     raise SyntaxError("Expected '$' after sub-label",
+        #                       token=sub_label_token)
+
+        # Check for optional $size
+        rune_dollar = (self.current_token
+                       and self.current_token.type == TOKENTYPE.RUNE_DOLLAR)
+        if (rune_dollar):
+            dollar_token = self.current_token
+            # Consume '$'
+            self._advance()
+            if not (self.current_token
+                    and self.current_token.type == TOKENTYPE.HEX_LITERAL):
+                raise SyntaxError("Expected size (HEX_LITERAL) after '$'",
+                                  token=dollar_token)
+            size_hex_token = self.current_token
+            try:
+                size = int(size_hex_token.word, 16)
+                if size < 0:
+                    raise ValueError("Size cannot be negative.")
+            except ValueError:
+                raise SyntaxError("Invalid size %s for sub-label %s" % (
+                    size_hex_token.word, sub_label_token.word),
+                                  token=size_hex_token)
+            logger.debug("    Sub-label '%s/%s' field occupies %s byte(s).",
+                         parent_label_name, sub_label_token.word, size)
+            logger.debug("       Advancing PC.")
+            self.current_address += size
+            self._advance()
 
     def _handle_label_definition(self):
         # For @
@@ -473,6 +483,42 @@ class Parser:
         self.current_address += 1
         self._advance()
 
+    def _handle_literal_absolute_address_op(self):
+        """Handle the ';label' construct.
+
+        Implies loading an absolute address. In Pass 1, this is
+        assumed to take 3 bytes (e.g., LIT2 #address).
+        """
+        # The ';'
+        directive_token = self.current_token
+        if directive_token is None:
+            raise InternalParsingError("_handle_literal_absolute_address_op"
+                                       " called with no current token")
+        # Consume ';'
+        self._advance()
+        if not (self.current_token and
+                self.current_token.type == TOKENTYPE.IDENTIFIER):
+            raise SyntaxError("Expected label name (IDENTIFIER) after ';'",
+                              token=directive_token)
+
+        label_name_token = self.current_token
+        label_name = label_name_token.word
+        # This operation is effectively LIT2 #address_of_label
+        # Takes 3 bytes
+        # 1 byte for implicit LIT2 opcode + 2 bytes for the address.
+        op_size = 3
+        logger.debug("  Literal Absolute Address Op: ;%s,"
+                     " size: %s bytes"
+                     " (Line %s)",
+                     label_name,
+                     op_size,
+                     directive_token.line)
+        self.current_address += op_size
+        # Consume IDENTIFIER token/label name
+        self._advance()
+        # No symbol is defined here. This is an op.
+        # The label is defined by '@' and it will be checked in Pass 2.
+
     def parse_pass1(self):
         """Parse tokens Pass #1."""
         logger.debug("Starting parser pass 1")
@@ -496,6 +542,8 @@ class Parser:
                         self._handle_literal_number_directive()
                     case TOKENTYPE.HEX_LITERAL:
                         self._handle_standalone_hex_data()
+                    case TOKENTYPE.RUNE_SEMICOLON:
+                        self._handle_literal_absolute_address_op()
                     case TOKENTYPE.IDENTIFIER:
                         self._handle_identifier_or_opcode()
                     case _:
