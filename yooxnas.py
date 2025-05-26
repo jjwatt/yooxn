@@ -97,6 +97,8 @@ class Lexer:
     def _add_token(self, token_type: TOKENTYPE, word: str | None = None):
         if word is None:
             word = self.src[self.start:self.cursor]
+        print(f"LEXER_DEBUG: Creating Token: Type={token_type.name},"
+              f"Word='{word}', Line={self.line}, Cursor={self.cursor}")
         return Token(token_type, word, self.line)
 
     def _skip_whitespace_and_comments(self):
@@ -106,6 +108,9 @@ class Lexer:
             if char in ' \t\r':
                 self._advance()
             elif char == '\n':
+                print(f"LEXER_DEBUG: Newline char encountered. "
+                      f"Advancing line from {self.line} to {self.line + 1}. "
+                      f"Cursor: {self.cursor}")
                 self._advance()
                 self.line += 1
             # Start block comment
@@ -266,7 +271,8 @@ class Parser:
                 if self.current_token and self.current_token.type == TOKENTYPE.HEX_LITERAL:
                     # Convert hex string to integer
                     address = int(self.current_token.word, 16)
-                    print(f'    Padding to address 0x{address:04x}')
+                    print(f'    Padding to address 0x{address:04x} '
+                          f'(Line {self.current_token.line})')
                     self.current_address = address
                     self._advance()  # Consume hex literal
                 else:
