@@ -332,107 +332,39 @@ class Parser:
     def parse_pass1(self):
         """Parse tokens Pass #1."""
         logger.debug("Starting parser pass 1")
-        while (self.current_token is not None
-               and self.current_token.type != TOKENTYPE.EOF):
-            token_type = self.current_token.type
-            if token_type == TOKENTYPE.RUNE_PIPE:
-                if not self._handle_absolute_padding():
-                    break
-            elif token_type == TOKENTYPE.RUNE_AT:
-                # Consume '@'
-                self._advance()
-                if self.current_token and self.current_token.type == TOKENTYPE.IDENTIFIER:
-                    label_name = self.current_token.word
-                    if label_name in self.symbol_table:
-                        # Error: Duplicate label definition
-                        self._log_err(f"Duplicate label '{label_name}'")
-                    else:
-                        self.symbol_table[label_name] = self.current_address
-                        logger.debug(f"Defined label '{label_name}'"
-                                     f"at 0x{self.current_address:04x}")
-                    self._advance()
-                else:
-                    # Error: Expected label name after @
-                    self._log_err("Expected label name after '@'")
-                    break
+        if not self.tokens or self.tokens[0].type == TOKENTYPE.EOF:
+            logger.debug('No tokens to parse.')
+            return
+        if self.current_token is None and self.tokens:
+            self.current_token = self.tokens[0]
 
-            elif token_type == TOKENTYPE.RAW_ASCII_CHUNK:
-                self._handle_raw_ascii_chunk()
+        try:
+            while (self.current_token is not None
+                   and self.current_token.type != TOKENTYPE.EOF):
+                token_type = self.current_token.type
+                match token_type:
+                    case TOKENTYPE.RUNE_PIPE:
+                        self._handle_absolute_padding()
+                    case TOKENTYPE.RUNE_AT:
+                        self._handle_label_definition()
+                    case TOKENTYPE.RAW_ASCII_CHUNK:
+                        self._handle_raw_ascii_chunk()
+                    case TOKENTYPE.RUNE_HASH:
+                        self._handle_literal_number_directive()
+                    case TOKENTYPE.HEX_LITERAL:
+                        self._handle_standalone_hex_data()
+                    case TOKENTYPE.IDENTIFIER:
+                        self._handle_identifier_or_opcode()
+                    case _:
+                        logging.debug(' Skipping unhandled token: "%s"'
+                                      ' type: %s (Line %s)',
+                                      self.current_token.word,
+                                      self.token_type,
+                                      self.current_token.line)
+                        self._advance()
 
-            # Handle #LITERAL (LIT/LIT2 opcodes + data)
-            elif token_type == TOKENTYPE.RUNE_HASH:
-                self._advance()
-                if self.current_token and self.current_token.type ==TOKENTYPE.HEX_LITERAL:
-                    literal_content_word = self.current_token.word
-                    literal_len = len(literal_content_word)
-                    op_size = 0
-                    # Should not happen if lexer is correct
-                    if literal_len == 0:
-                        self._log_err("Empty hex literal after #")
-                    # 1-byte value
-                    elif literal_len <= 2:
-                        # 1 byte for LIT opcode + 1 byte for value (e.g., #1, #0f, #ab)
-                        op_size = 2
-                        self._log_hex_literal_content(literal_content_word,
-                                                      op_size)
-                    # 2-byte value
-                    elif literal_len <= 4:
-                        # 1 byte for LIT2 opcode + 2 bytes for value (e.g., #123, #abcd)
-                        op_size = 3
-                        self._log_hex_literal_content(literal_content_word,
-                                                      op_size)
-                    else:
-                        self._log_err("Hex Literal %s is too long",
-                                           literal_content_word)
-                        break
-                    self.current_address += op_size
-                    # Consume HEX_LITERAL token
-                    self._advance()
-            elif token_type == TOKENTYPE.HEX_LITERAL:
-                data_content_word = self.current_token.word
-                data_len = len(data_content_word)
-                data_size = 0
-                if data_len == 0:
-                    self._log_err("Empty raw hex data.")
-                    break
-                elif data_len <= 2:
-                    data_size = 1
-                elif data_len <= 4:
-                    data_size = 2
-                else:
-                    self._log_err(f"Error raw hex data is too long: {data_len}.")
-                    logger.debug("Diagnostics: ")
-                    logger.debug("\tdata_content_word: %s", data_content_word)
-                    logger.debug("\tcurrent_address: %s", self.current_address)
-                    logger.debug("\tcurrent_token: %s",
-                                 self.current_token.print())
-                    break
-                logger.debug("\tRaw Hex Data Byte(s): %s,"
-                             "size: %s bytes (Line %s)",
-                             data_content_word,
-                             data_size,
-                             self.current_token.line)
-                self.current_address += data_size
-                # Consume the HEX_LITERAL
-                self._advance()
-
-            # Placeholder for other tokens: For now, just advance past them for Pass 1.
-            # In a real Pass 1, you'd calculate their size and increment current_address.
-            # For example, an opcode IDENTIFIER might take 1 byte.
-            # LIT #12 would take 2 bytes (LIT + #12).
-            # LIT #1234 would take 3 bytes (LIT + #1234).
-            # Your ";hello-word" would expand to LIT2 #address, taking 3 bytes.
-            # The Console definitions like &vector $2 also increment current_address.
-            else:
-                # For now, let's just assume every other recognized token takes up 1 byte
-                # This is a VAST oversimplification but helps test label/padding.
-                # You'll refine this later.
-                if token_type not in [TOKENTYPE.EOF]: # Add other non-byte tokens if any
-                     # print(f"  (Skipping/counting token {self.current_token.word} - type {token_type} - advancing PC by 1 (placeholder))")
-                     # self.current_address += 1 # Placeholder increment
-                     pass # Let's not increment PC for unknown tokens yet to keep it simple
-                self._advance() # Consume the current token
-
+        except ParsingError as pe:
+            logging.error(pe)
         logger.debug("Parser Pass 1 Finished.")
         logger.debug("Symbol Table:")
         for label, address in self.symbol_table.items():
