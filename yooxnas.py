@@ -111,8 +111,8 @@ class Lexer:
                 print(f"LEXER_DEBUG: Newline char encountered. "
                       f"Advancing line from {self.line} to {self.line + 1}. "
                       f"Cursor: {self.cursor}")
-                self._advance()
                 self.line += 1
+                self._advance()
             # Start block comment
             elif char == '(':
                 self._advance()
