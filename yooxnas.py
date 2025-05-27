@@ -265,7 +265,8 @@ class Parser:
     def __init__(self, tokens: list[Token]):
         """Initialize a new parser object.
 
-        tokens: A list of Tokens.
+        Args:
+            tokens: A list of Tokens.
         """
         self.tokens = tokens
         self.token_idx = 0
@@ -279,6 +280,10 @@ class Parser:
         self.rom_bytes = bytearray()
 
     def _advance(self):
+        """Advance the token.
+
+        Consume the token.
+        """
         self.token_idx += 1
         if self.token_idx < len(self.tokens):
             self.current_token = self.tokens[self.token_idx]
@@ -299,6 +304,7 @@ class Parser:
         logger.error(f"Error: Line {line_no}: {err}")
 
     def _handle_absolute_padding(self):
+        """Handle absolute padding with '|'."""
         # The '|' token
         directive_token = self.current_token
         # Consume '|'
@@ -323,7 +329,10 @@ class Parser:
             raise SyntaxError(msg, token=directive_token)
 
     def _handle_raw_ascii_chunk(self):
-        """Handle RAW_ASCII_CHUNK."""
+        """Handle RAW_ASCII_CHUNK.
+
+        These are prefixed with '"', e.g. "Hello
+        """
         token = self.current_token
         content = token.word
         size = len(content)
@@ -334,6 +343,12 @@ class Parser:
         self._advance()
 
     def _handle_sub_label_field(self, parent_label_name: str):
+        """Handle sub-labels.
+
+        Handle '&' and '&' followed by '$'.
+        These are sub-labels. And '$' is used to
+        reserve space.
+        """
         ampersand_token = self.current_token
         # Consume '&'
         self._advance()
@@ -354,11 +369,6 @@ class Parser:
                          f" at 0x{self.current_address}")
         # Consume sub-label identifier
         self._advance()
-
-        # if not (self.current_token
-        #         and self.current_token.type == TOKENTYPE.RUNE_DOLLAR):
-        #     raise SyntaxError("Expected '$' after sub-label",
-        #                       token=sub_label_token)
 
         # Check for optional $size
         rune_dollar = (self.current_token
@@ -387,6 +397,10 @@ class Parser:
             self._advance()
 
     def _handle_label_definition(self):
+        """Handle label definitions.
+
+        Handle '@' label definitions.
+        """
         # For @
         directive_token = self.current_token
         # Consume '@'
@@ -413,7 +427,11 @@ class Parser:
                and self.current_token.type == TOKENTYPE.RUNE_AMPERSAND):
             self._handle_sub_label_field(parent_label_name)
 
-    def _handle_literal_number_directive(self):
+    def _handle_literal_hash_directive(self):
+        """Handle literal directive.
+
+        Handle '#'. This is like an alias for LIT or LIT2.
+        """
         # The '#' token
         directive_token = self.current_token
         # Consume '#'
@@ -450,6 +468,10 @@ class Parser:
                               f" {literal_word}", token=literal_token)
 
     def _handle_standalone_hex_data(self):
+        """Handle raw hex literals.
+
+        These are literals without LIT or # in front of them.
+        """
         # For hex literal as raw data
         data_token = self.current_token
         data_word = data_token.word
@@ -475,6 +497,7 @@ class Parser:
         self._advance()
 
     def _handle_identifier_or_opcode(self):
+        """Handle identifiers or opcodes."""
         # Just get estimated size for now
         op_token = self.current_token
         logger.debug("Opcode/Identifier: '%s', (assuming 1 byte)"
@@ -539,7 +562,7 @@ class Parser:
                     case TOKENTYPE.RAW_ASCII_CHUNK:
                         self._handle_raw_ascii_chunk()
                     case TOKENTYPE.RUNE_HASH:
-                        self._handle_literal_number_directive()
+                        self._handle_literal_hash_directive()
                     case TOKENTYPE.HEX_LITERAL:
                         self._handle_standalone_hex_data()
                     case TOKENTYPE.RUNE_SEMICOLON:
