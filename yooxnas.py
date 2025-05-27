@@ -602,8 +602,8 @@ def main():
     args = parse_args()
     if args.file:
         with open(args.file, 'r') as asmfile:
-            lines = asmfile.readlines()
-            lexer = Lexer('\n'.join(lines))
+            source_code = asmfile.read()
+            lexer = Lexer(source_code)
             tokens = lexer.scan_all_tokens()
             for token in tokens:
                 token.print()
