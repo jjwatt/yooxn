@@ -7,3 +7,6 @@ tokens = l.scan_all_tokens()
 
 for t in tokens:
     t.print()
+
+parser = yooxnas.Parser(tokens)
+parser.parse_pass1()
