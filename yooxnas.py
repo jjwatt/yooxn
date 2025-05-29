@@ -102,8 +102,8 @@ class Lexer:
     def _add_token(self, token_type: TOKENTYPE, word: str | None = None):
         if word is None:
             word = self.src[self.start:self.cursor]
-        logger.debug(f"LEXER: Creating Token: Type={token_type.name},"
-                     f"Word='{word}', Line={self.line}, Cursor={self.cursor}")
+        # logger.debug(f"LEXER: Creating Token: Type={token_type.name},"
+        #              f"Word='{word}', Line={self.line}, Cursor={self.cursor}")
         return Token(token_type, word, self.line)
 
     def _skip_whitespace_and_comments(self):
@@ -113,9 +113,9 @@ class Lexer:
             if char in ' \t\r':
                 self._advance()
             elif char == '\n':
-                logger.debug(f"LEXER: Newline char encountered. "
-                             f"Advancing line from {self.line} to {self.line + 1}. "
-                             f"Cursor: {self.cursor}")
+                # logger.debug(f"LEXER: Newline char encountered. "
+                #              f"Advancing line from {self.line} to {self.line + 1}. "
+                #              f"Cursor: {self.cursor}")
                 self.line += 1
                 self._advance()
             # Start block comment
@@ -262,6 +262,14 @@ class Parser:
     Uses Tokens from the Lexer.
     """
 
+    OPS = set([name.upper() for name in [
+        "LIT", "INC", "POP", "NIP", "SWP", "ROT", "DUP", "OVR",
+        "EQU", "NEQ", "GTH", "LTH", "JMP", "JCN", "JSR", "STH",
+        "LDZ", "STZ", "LDR", "STR", "LDA", "STA", "DEI", "DEO",
+        "ADD", "SUB", "MUL", "DIV", "AND", "ORA", "EOR", "SFT",
+        "BRK"
+    ]])
+
     def __init__(self, tokens: list[Token]):
         """Initialize a new parser object.
 
@@ -290,43 +298,84 @@ class Parser:
         else:
             self.current_token = None
 
-    def _log_hex_literal_content(self, content, op_size):
-        """Print out a hex literal token."""
-        lit = "LIT"
-        if op_size == 3:
-            lit = "LIT2"
-        logger.debug(f"Literal Number ({lit} + value): #{content},"
-                     f"size: {op_size} bytes (Line {self.current_token.line})")
+    def get_opcode_byte(self, op_word: str) -> int | None:
+        """
+        Simplified version of uxnasm.c's findopcode.
 
-    def _log_err(self, err):
-        """Print a line error."""
-        line_no = self.current_token.line if self.current_token else '??'
-        logger.error(f"Error: Line {line_no}: {err}")
+        Returns the opcode byte or None if not a valid opcode.
+        This should handle base opcodes and modes like 'k', '2', 'r'.
+        For Pass 1 size calculation, we only care IF it's an opcode (size 1).
+        Actual byte value is for Pass 2.
+        """
+        base_op = op_word[:3].upper()
+        if base_op not in self.OPS:
+            return None
+        return 0x01
 
-    def _handle_absolute_padding(self):
-        """Handle absolute padding with '|'."""
-        # The '|' token
-        directive_token = self.current_token
-        # Consume '|'
+    def _handle_padding_rune(self):
+        """Handle '|' and '$' runes."""
+        rune_token = self.current_token
+        rune_char = rune_token.word[0]
+        # Consume '|' token
         self._advance()
-        current_token = self.current_token
-        token_type = self.current_token.type
-        if current_token and token_type == TOKENTYPE.HEX_LITERAL:
-            try:
-                address = int(self.current_token.word, 16)
-                self.current_address = address
-                logger.debug(f'Padding to address 0x{address:04x} '
-                             f'(Line {self.current_token.line})')
-                self.current_address = address
-                # Consume hex literal
-                self._advance()
-            except ValueError:
-                current_word = self.current_token.word
-                msg = f"Invalid hex address '{current_word}' for '|'"
-                raise SyntaxError(msg, token=directive_token)
-        else:
-            msg = "Expected address (HEX_LITERAL) after '|'"
-            raise SyntaxError(msg, token=directive_token)
+
+        if not (self.current_token and
+                self.current_token.type == TOKENTYPE.HEX_LITERAL):
+            # TODO: looking up label in symbol_table
+            raise SyntaxError(f"Expected hex literal after"
+                              f"padding rune '{rune_char}'",
+                              token=rune_token)
+
+        value_str = self.current_token.word
+        try:
+            val = int(value_str, 16)
+        except ValueError:
+            raise SyntaxError(f"Invalid hex value '{value_str}'"
+                              f" for padding rune '{rune_char}'",
+                              token=self.current_token)
+
+        # Absolute padding
+        if rune_char == '|':
+            logging.debug(f"Padding to absolute address"
+                          f" 0x{val:04x} (Line {rune_token.line})")
+            self.current_address = val
+        # Relative padding
+        elif rune_char == '$':
+            logging.debug(f"Padding by relative offset 0x{val:02x} "
+                          f"(Line {rune_token.line})."
+                          f" PC from 0x{self.current_address:04x}"
+                          f" to 0x{self.current_address + val:04x}")
+            self.current_address += val
+        self._advance()
+
+    def _handle_addressing_rune_op(self, rune_char: str,
+                                   implied_opcode_byte: int,
+                                   placeholder_size: int):
+        """
+        Handle runes like ';', '!', '?', ',' and '.'.
+
+        Handles runes like ;, !, ?, ,, . that imply an opcode and a placeholder
+        for an address/offset.
+        rune_char: The character itself (e.g., ';', '!')
+        implied_opcode_byte: The byte value of the opcode uxnasm.c writes
+                             (e.g., LIT2's opcode, JMI's 0x40)
+        placeholder_size: 1 for byte, 2 for short (0xff or 0xffff)
+        """
+        rune_token = self.current_token
+        self._advance()
+        if not (self.current_token and self.current_token.type == TOKENTYPE.IDENTIFIER):
+            raise SyntaxError(f"Expected label name (IDENTIFIER) "
+                              f"after rune '{rune_char}'.", token=rune_token)
+
+        label_token = self.current_token
+        # Total size = 1 (for the implied_opcode_byte) + placeholder_size
+        total_size = 1 + placeholder_size
+        logging.debug(f"Addressing Rune Op: {rune_char}{label_token.word}"
+                      f" -> [Opcode 0x{implied_opcode_byte:02x} +"
+                      f" {placeholder_size}-byte placeholder],"
+                      f" total size {total_size} (Line {rune_token.line})")
+        self.current_address += total_size
+        self._advance()
 
     def _handle_raw_ascii_chunk(self):
         """Handle RAW_ASCII_CHUNK.
@@ -340,6 +389,38 @@ class Parser:
                      f"size: {size} bytes"
                      f" Line: {self.current_token.line}")
         self.current_address += size
+        self._advance()
+
+    def _handle_hash_literal(self):
+        """Handle hash literals.
+
+        These become LIT/LIT2 + value.
+        """
+        token = self.current_token
+        if not (self.current_token and
+                self.current_token.type == TOKENTYPE.HEX_LITERAL):
+            SyntaxError("Expected hex literal after #", token=token)
+        # Consume '#'
+        self._advance()
+
+        hex_literal = self.current_token
+        val = hex_literal.word
+        val_len = len(val)
+        size = 0
+
+        if val_len == 0:
+            raise SyntaxError("Empty hex literal after #", token=hex_literal)
+        elif val_len <= 2:
+            size = 2
+            logger.debug(f"LIT #{val}, size {size} (Line {token.line})")
+        elif val_len <= 4:
+            size = 4
+            logger.debug(f"LIT2 #{val}, size {size} (Line {token.line})")
+        else:
+            raise SyntaxError(f"Hex literal too long after #: {val}",
+                              token=token)
+        self.current_address += size
+        # Consume hex literal token.
         self._advance()
 
     def _handle_sub_label_field(self, parent_label_name: str):
@@ -427,46 +508,6 @@ class Parser:
                and self.current_token.type == TOKENTYPE.RUNE_AMPERSAND):
             self._handle_sub_label_field(parent_label_name)
 
-    def _handle_literal_hash_directive(self):
-        """Handle literal directive.
-
-        Handle '#'. This is like an alias for LIT or LIT2.
-        """
-        # The '#' token
-        directive_token = self.current_token
-        # Consume '#'
-        self._advance()
-        if not (self.current_token
-                and self.current_token.type == TOKENTYPE.HEX_LITERAL):
-            raise SyntaxError("Expected hex literal after '#'",
-                              token=directive_token)
-        literal_token = self.current_token
-        literal_word = literal_token.word
-        literal_len = len(literal_word)
-        op_size = 0
-        if literal_len == 0:
-            raise SyntaxError("Empty hex literal after '#'.",
-                              token=directive_token)
-        elif literal_len <= 2:
-            op_size = 2
-            logger.debug("  Literal number (LIT + value): %s"
-                         " size: %s byte(s),"
-                         " (Line %s)",
-                         literal_word,
-                         op_size,
-                         directive_token.line)
-        elif literal_len <= 4:
-            op_size = 3
-            logger.debug("  Literal number (LIT2 + value): %s"
-                         " size: %s byte(s),"
-                         " (Line %s)",
-                         literal_word,
-                         op_size,
-                         directive_token.line)
-        else:
-            raise SyntaxError(f"Hex literal too long:"
-                              f" {literal_word}", token=literal_token)
-
     def _handle_standalone_hex_data(self):
         """Handle raw hex literals.
 
@@ -506,42 +547,6 @@ class Parser:
         self.current_address += 1
         self._advance()
 
-    def _handle_literal_absolute_address_op(self):
-        """Handle the ';label' construct.
-
-        Implies loading an absolute address. In Pass 1, this is
-        assumed to take 3 bytes (e.g., LIT2 #address).
-        """
-        # The ';'
-        directive_token = self.current_token
-        if directive_token is None:
-            raise InternalParsingError("_handle_literal_absolute_address_op"
-                                       " called with no current token")
-        # Consume ';'
-        self._advance()
-        if not (self.current_token and
-                self.current_token.type == TOKENTYPE.IDENTIFIER):
-            raise SyntaxError("Expected label name (IDENTIFIER) after ';'",
-                              token=directive_token)
-
-        label_name_token = self.current_token
-        label_name = label_name_token.word
-        # This operation is effectively LIT2 #address_of_label
-        # Takes 3 bytes
-        # 1 byte for implicit LIT2 opcode + 2 bytes for the address.
-        op_size = 3
-        logger.debug("  Literal Absolute Address Op: ;%s,"
-                     " size: %s bytes"
-                     " (Line %s)",
-                     label_name,
-                     op_size,
-                     directive_token.line)
-        self.current_address += op_size
-        # Consume IDENTIFIER token/label name
-        self._advance()
-        # No symbol is defined here. This is an op.
-        # The label is defined by '@' and it will be checked in Pass 2.
-
     def parse_pass1(self):
         """Parse tokens Pass #1."""
         logger.debug("Starting parser pass 1")
@@ -556,17 +561,44 @@ class Parser:
                 token_type = self.current_token.type
                 match token_type:
                     case TOKENTYPE.RUNE_PIPE:
-                        self._handle_absolute_padding()
+                        self._handle_padding_rune()
+                    case TOKENTYPE.RUNE_DOLLAR:
+                        self._handle_padding_rune()
                     case TOKENTYPE.RUNE_AT:
+                        self._handle_label_definition()
+                    case TOKENTYPE.RUNE_AMPERSAND:
                         self._handle_label_definition()
                     case TOKENTYPE.RAW_ASCII_CHUNK:
                         self._handle_raw_ascii_chunk()
                     case TOKENTYPE.RUNE_HASH:
-                        self._handle_literal_hash_directive()
+                        self._handle_hash_literal()
                     case TOKENTYPE.HEX_LITERAL:
                         self._handle_standalone_hex_data()
                     case TOKENTYPE.RUNE_SEMICOLON:
-                        self._handle_literal_absolute_address_op()
+                        self._handle_addressing_rune_op(
+                            ';',
+                            self.get_opcode_byte("LIT2"), 2
+                        )
+                    case TOKENTYPE.RUNE_QUESTION:
+                        self._handle_addressing_rune_op(
+                            '?',
+                            self.get_opcode_byte("JCI"), 2
+                        )
+                    case TOKENTYPE.RUNE_EXCLAIM:
+                        self._handle_addressing_rune_op(
+                            '!',
+                            self.get_opcode_byte("JMI"), 2
+                        )
+                    case TOKENTYPE.RUNE_COMMA:
+                        self._handle_addressing_rune_op(
+                            ',',
+                            self.get_opcode_byte("LIT"), 1
+                        )
+                    case TOKENTYPE.RUNE_PERIOD:
+                        self._handle_addressing_rune_op(
+                            '.',
+                            self.get_opcode_byte("LIT"), 1
+                        )
                     case TOKENTYPE.IDENTIFIER:
                         self._handle_identifier_or_opcode()
                     case _:
@@ -605,8 +637,9 @@ def main():
             source_code = asmfile.read()
             lexer = Lexer(source_code)
             tokens = lexer.scan_all_tokens()
-            for token in tokens:
-                token.print()
+            logger.debug("Finished tokenizing.")
+            # for token in tokens:
+            #     token.print()
 
             if tokens and tokens[-1].type != TOKENTYPE.ILLEGAL:
                 parser = Parser(tokens)
