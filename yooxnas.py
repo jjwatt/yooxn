@@ -354,9 +354,10 @@ class Parser:
             self.current_address += val
         self._advance()
 
-    def _handle_addressing_rune_op(self, rune_char: str,
-                                   implied_opcode_byte: int,
-                                   placeholder_size: int):
+    def _handle_literal_addressing_rune_op(self,
+                                           rune_char: str,
+                                           implied_opcode_byte: int,
+                                           placeholder_size: int):
         """
         Handle runes like ';', '!', '?', ',' and '.'.
 
@@ -369,7 +370,8 @@ class Parser:
         """
         rune_token = self.current_token
         if rune_token is None:
-            raise ParsingError("Internal Error: _handle_addressing_rune_op"
+            raise ParsingError("Internal Error:"
+                               " _handle_literal_addressing_rune_op"
                                " called with no current token")
         # Consume rune
         self._advance()
@@ -407,6 +409,53 @@ class Parser:
                       f" total size {total_size} (Line {rune_token.line})")
         self.current_address += total_size
         # Consume label identifier token
+        self._advance()
+
+    def _handle_raw_addressing_rune_op(self, rune_char: str, placeholder_size: int):
+        """Handle raw addressing runes like '_', '-', and '='.
+
+        These directly reserve placeholder_size bytes for an address/offset.
+        """
+        rune_token = self.current_token
+        if rune_token is None:
+            raise ParsingError("Internal error: _handle_raw_placeholder_op"
+                               " called with no current token.")
+        # Consume the raw addressing rune
+        self._advance()
+
+        is_sublabel_syntax = False
+        label_prefix = ""
+
+        # Check for '&' indicating a sublabel
+        if (self.current_token and
+                self.current_token.type == TOKENTYPE.RUNE_AMPERSAND):
+            is_sublabel_syntax = True
+            label_prefix = '&'
+            # Consume '&'
+            self._advance()
+
+        # Expect the main identifier part of the label
+        if not (self.current_token and
+                self.current_token.type == TOKENTYPE.IDENTIFIER):
+            if is_sublabel_syntax:
+                raise SyntaxError(f'Expected label identifier after'
+                                  f' {rune_token.word}&.',
+                                  token=rune_token)
+            else:
+                raise SyntaxError(f'Expected label name after'
+                                  f' {rune_token.word}.',
+                                  token=rune_token)
+        label_id_token = self.current_token
+        base_label_name = label_id_token.word
+        displayed_label = f'{label_prefix}{base_label_name}'
+
+        total_size = placeholder_size
+        logging.debug("Raw Addressing Rune Op:"
+                      f"{rune_token.word}{displayed_label}"
+                      f" reserves {placeholder_size}-byte placeholder],"
+                      f" total size {total_size} (Line {rune_token.line})")
+        self.current_address += total_size
+        # Consume the identifier token
         self._advance()
 
     def _handle_conditional_q_lbrace_block(self):
@@ -493,26 +542,41 @@ class Parser:
                 self._handle_hash_literal()
             case TOKENTYPE.HEX_LITERAL:
                 self._handle_standalone_hex_data()
+            # Literal Absolute pushes an absolute address short to label.
             case TOKENTYPE.RUNE_SEMICOLON:
-                self._handle_addressing_rune_op(
+                self._handle_literal_addressing_rune_op(
                     ';', self.get_opcode_byte("LIT2"), 2
                 )
+            # Conditional Jump routine.
             case TOKENTYPE.RUNE_QUESTION:
-                self._handle_addressing_rune_op(
+                self._handle_literal_addressing_rune_op(
                     '?', self.get_opcode_byte("JCI"), 2
                 )
+            # Literal Jump routine.
             case TOKENTYPE.RUNE_EXCLAIM:
-                self._handle_addressing_rune_op(
+                self._handle_literal_addressing_rune_op(
                     '!', self.get_opcode_byte("JMI"), 2
                 )
+            # Literal Relative pushes a relative distance byte to the label.
             case TOKENTYPE.RUNE_COMMA:
-                self._handle_addressing_rune_op(
+                self._handle_literal_addressing_rune_op(
                     ',', self.get_opcode_byte("LIT"), 1
                 )
+            # Literal Zero-Page pushes an absolute address byte to the label.
             case TOKENTYPE.RUNE_PERIOD:
-                self._handle_addressing_rune_op(
+                self._handle_literal_addressing_rune_op(
                     '.', self.get_opcode_byte("LIT"), 1
                 )
+            # Raw addressing ops. These don't have implied opcodes.
+            # Raw Relative writes a relative distance byte to the label.
+            case TOKENTYPE.RUNE_UNDERSCORE:
+                self._handle_raw_addressing_rune_op('_', 1)
+            # Raw Zero-Page writes an absolute address byte to the label.
+            case TOKENTYPE.RUNE_MINUS:
+                self._handle_raw_addressing_rune_op('-', 1)
+            # Raw Absolute writes an absolute address short to the label.
+            case TOKENTYPE.RUNE_EQUAL:
+                self._handle_raw_addressing_rune_op('=', 2)
             case TOKENTYPE.RUNE_LBRACE:
                 # For raw { ... }
                 self._handle_raw_hex_data_block()
