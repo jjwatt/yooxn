@@ -363,7 +363,8 @@ class Parser:
         """
         rune_token = self.current_token
         if rune_token is None:
-            raise ParsingError("Internal Error: _handle_addressing_rune_op called with no current token")
+            raise ParsingError("Internal Error: _handle_addressing_rune_op"
+                               " called with no current token")
         # Consume rune
         self._advance()
 
@@ -372,7 +373,7 @@ class Parser:
 
         # Check for '&' indicating a sublabel
         if (self.current_token and
-            self.current_token.type == TOKENTYPE.RUNE_AMPERSAND):
+                self.current_token.type == TOKENTYPE.RUNE_AMPERSAND):
             is_sublabel_syntax = True
             label_prefix = '&'
             # Consume '&'
