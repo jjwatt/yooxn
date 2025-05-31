@@ -267,7 +267,7 @@ class Parser:
         "EQU", "NEQ", "GTH", "LTH", "JMP", "JCN", "JSR", "STH",
         "LDZ", "STZ", "LDR", "STR", "LDA", "STA", "DEI", "DEO",
         "ADD", "SUB", "MUL", "DIV", "AND", "ORA", "EOR", "SFT",
-        "BRK"
+        "BRK", "JCI"
     ]])
 
     def __init__(self, tokens: list[Token]):
@@ -362,19 +362,44 @@ class Parser:
         placeholder_size: 1 for byte, 2 for short (0xff or 0xffff)
         """
         rune_token = self.current_token
+        if rune_token is None:
+            raise ParsingError("Internal Error: _handle_addressing_rune_op called with no current token")
+        # Consume rune
         self._advance()
-        if not (self.current_token and self.current_token.type == TOKENTYPE.IDENTIFIER):
-            raise SyntaxError(f"Expected label name (IDENTIFIER) "
-                              f"after rune '{rune_char}'.", token=rune_token)
 
-        label_token = self.current_token
-        # Total size = 1 (for the implied_opcode_byte) + placeholder_size
+        is_sublabel_syntax = False
+        label_prefix = ""
+
+        # Check for '&' indicating a sublabel
+        if (self.current_token and
+            self.current_token.type == TOKENTYPE.RUNE_AMPERSAND):
+            is_sublabel_syntax = True
+            label_prefix = '&'
+            # Consume '&'
+            self._advance()
+
+        # Expect the main identifier part of the label
+        if not (self.current_token and
+                self.current_token.type == TOKENTYPE.IDENTIFIER):
+            if is_sublabel_syntax:
+                raise SyntaxError(f'Expected label identifier after'
+                                  f' {rune_token.word}&.',
+                                  token=rune_token)
+            else:
+                raise SyntaxError(f'Expected label name after'
+                                  f' {rune_token.word}.',
+                                  token=rune_token)
+        label_id_token = self.current_token
+        base_label_name = label_id_token.word
+
+        displayed_label = f'{label_prefix}{base_label_name}'
         total_size = 1 + placeholder_size
-        logging.debug(f"Addressing Rune Op: {rune_char}{label_token.word}"
+        logging.debug(f"Addressing Rune Op: {rune_token.word}{displayed_label}"
                       f" -> [Opcode 0x{implied_opcode_byte:02x} +"
                       f" {placeholder_size}-byte placeholder],"
                       f" total size {total_size} (Line {rune_token.line})")
         self.current_address += total_size
+        # Consume label identifier token
         self._advance()
 
     def _handle_raw_ascii_chunk(self):
