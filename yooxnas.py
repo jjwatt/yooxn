@@ -518,8 +518,16 @@ class Parser:
                 self._handle_raw_hex_data_block()
 
             case TOKENTYPE.RUNE_LBRACKET:
-                # For raw [ ... ] (ignored)
-                self._handle_ignored_block(self)
+                # For [ (ignored)
+                logger.debug(f"  Ignoring Rune '['"
+                             f" (Line {self.current_token.line}")
+                self._advance()
+
+            case TOKENTYPE.RUNE_RBRACKET:
+                # ] ignored
+                logger.debug(f"  Ignoring Rune ']'"
+                             f" (Line {self.current_token.line}")
+                self._advance()
 
             case TOKENTYPE.IDENTIFIER:
                 self._handle_identifier_token()
@@ -706,11 +714,38 @@ class Parser:
 
     def _handle_raw_hex_data_block(self):
         """Handle raw hex data blocks {}."""
-        raise NotImplementedError
-
-    def _handle_ignored_block(self):
-        """Handle ignored blocks []."""
-        raise NotImplementedError
+        lbrace_token = self.current_token
+        logger.debug(f"  Raw Hex Data Block Start {{"
+                     f" (Line {lbrace_token.line})")
+        # Consume '{'
+        self._advance()
+        # Loop to consume hex literals inside the block
+        while (self.current_token is not None
+               and self.current_token.type != TOKENTYPE.RUNE_LBRACE):
+            if self.current_token.type == TOKENTYPE.HEX_LITERAL:
+                # Delegate to existing handler
+                self._handle_standalone_hex_data()
+            elif self.current_token.type == TOKENTYPE.EOF:
+                raise SyntaxError("Unclosed raw hex data block {"
+                                  f" Starting on line {lbrace_token.line}."
+                                  f" Reached EOF.", token=lbrace_token)
+            else:
+                # Unexpected token inside the block.
+                raise SyntaxError("Expected hex literal or '}' in"
+                                  " raw hex data block,"
+                                  f" found '{self.current_token.word}'",
+                                  token=self.current_token)
+        # After the loop, check if we found the closing brace.
+        if (self.current_token and self.current_token.type == TOKENTYPE.RUNE_RBRACE):
+            logger.debug(f"  Raw Hex Data Block End }}"
+                         f" (Line {self.current_token.line})")
+            # Consume '}'
+            self._advance()
+        else:
+            # EOF or unexpected state
+            raise SyntaxError("Unclosed raw hex data block {"
+                              f"starting on line {lbrace_token.line}."
+                              " Missing '}'.", token=lbrace_token)
 
     def _handle_identifier_token(self):
         """Handle identifiers or opcodes."""
