@@ -532,8 +532,6 @@ class Parser:
                 raise SyntaxError(f"Unexpected token during dispatch:"
                                   f" '{self.current_token.word}'",
                                   token=self.current_token)
-                # logger.debug(...)
-                # self._advance()
 
     def _handle_raw_ascii_chunk(self):
         """Handle RAW_ASCII_CHUNK.
@@ -698,12 +696,28 @@ class Parser:
 
     def _handle_identifier_token(self):
         """Handle identifiers or opcodes."""
-        # Just get estimated size for now
-        op_token = self.current_token
-        logger.debug("Opcode/Identifier: '%s', (assuming 1 byte)"
-                     " (Line %s)",
-                     op_token.word, op_token.line)
-        self.current_address += 1
+        id_token = self.current_token
+        word = id_token.word
+        size = 0
+
+        if self.get_opcode_byte(word):
+            size = 1
+            logger.debug(f"Opcode: '{word}', (size {size} byte)"
+                         f" (Line {id_token.line})")
+        else:
+            # A "bare word" not a known opcode or macro.  uxnasm.c
+            # treats this as a JSR-like call with 16-bit relative
+            # offset.
+            # Opcode (JSR-like e.g., 0x60 + 2-byte placeholder
+            size = 3
+            logger.debug(f" Bare word Call (to {word}),"
+                         f" size {size} bytes"
+                         f" (Line {id_token.line})")
+            # In Pass 2, this will involve makeref(word, ' ', ...) to
+            # resolve 'word' and writing the 0x60 opcode and the
+            # resolved 16-bit relative offset.
+        self.current_address += size
+        # Consume identifier
         self._advance()
 
     def parse_pass1(self):
@@ -712,7 +726,7 @@ class Parser:
         if not self.tokens or self.tokens[0].type == TOKENTYPE.EOF:
             logger.debug('No tokens to parse.')
             return
-        if self.current_token is None and self.tokens: # Should be set by __init__
+        if self.current_token is None and self.tokens:
             self.current_token = self.tokens[0]
         try:
             while (self.current_token is not None
@@ -722,24 +736,27 @@ class Parser:
                     next_t = self._peek_token(1)
                     if next_t and next_t.type == TOKENTYPE.RUNE_LBRACE:
                         self._handle_conditional_q_lbrace_block()
-                        # _handle_conditional_q_lbrace_block consumes tokens including '}',
-                        # so we continue to the next iteration of the while loop.
+                        # _handle_conditional_q_lbrace_block consumes
+                        # tokens including '}', so we continue to the
+                        # next iteration of the while loop.
                         continue
                 # For all other cases, use the general dispatcher
                 self._dispatch_current_token_for_pass1()
         except ParsingError as pe:
-            logger.error(str(pe)) # Use the __str__ method of your custom exception
-            logger.debug("Parser Pass 1 aborted due to error.") # Add this for clarity
-            # Consider re-raising or returning an error status if parse_pass1 is called by other code
+            logger.error(str(pe))
+            logger.debug("Parser Pass 1 aborted due to error.")
+            raise
 
-        # This part is outside the try...except, will run even if an error occurred mid-way
-        # which might be okay for seeing partial results, or you can move it inside the try.
-        # Or only print if no error occurred by checking a flag.
+        # This part is outside the try...except, will run even if an
+        # error occurred mid-way which might be okay for seeing
+        # partial results, or you can move it inside the try.  Or only
+        # print if no error occurred by checking a flag.
         logger.debug("Parser Pass 1 Finished.")
         logger.debug("Symbol Table:")
         for label, address in self.symbol_table.items():
             logger.debug(f"\t {label}: 0x{address:04x}")
         logger.debug(f"Final Calculated Address (after pass 1 processing): 0x{self.current_address:04x}")
+
 
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
