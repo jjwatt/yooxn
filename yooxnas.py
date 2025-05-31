@@ -170,10 +170,10 @@ class Lexer:
             case '/': return self._add_token(TOKENTYPE.RUNE_FORWARDSLASH)
             case '%': return self._add_token(TOKENTYPE.RUNE_PERCENT)
             case '~': return self._add_token(TOKENTYPE.RUNE_TILDE)
-            case '{': return self._add_token(TOKENTYPE.RUNE_RBRACKET)
-            case '}': return self._add_token(TOKENTYPE.RUNE_LBRACKET)
-            case '[': return self._add_token(TOKENTYPE.RUNE_LBRACE)
-            case ']': return self._add_token(TOKENTYPE.RUNE_RBRACE)
+            case '{': return self._add_token(TOKENTYPE.RUNE_LBRACE)
+            case '}': return self._add_token(TOKENTYPE.RUNE_RBRACE)
+            case '[': return self._add_token(TOKENTYPE.RUNE_LBRACKET)
+            case ']': return self._add_token(TOKENTYPE.RUNE_RBRACKET)
 
             case '"':
                 self.start = self.cursor
@@ -267,7 +267,7 @@ class Parser:
         "EQU", "NEQ", "GTH", "LTH", "JMP", "JCN", "JSR", "STH",
         "LDZ", "STZ", "LDR", "STR", "LDA", "STA", "DEI", "DEO",
         "ADD", "SUB", "MUL", "DIV", "AND", "ORA", "EOR", "SFT",
-        "BRK", "JCI"
+        "BRK", "JCI", "JMI"
     ]])
 
     def __init__(self, tokens: list[Token]):
@@ -297,6 +297,12 @@ class Parser:
             self.current_token = self.tokens[self.token_idx]
         else:
             self.current_token = None
+
+    def _peek_token(self, offset: int = 1):
+        peek_idx = self.token_idx + offset
+        if 0 <= peek_idx < len(self.tokens):
+            return self.tokens[peek_idx]
+        return None
 
     def get_opcode_byte(self, op_word: str) -> int | None:
         """
@@ -402,6 +408,132 @@ class Parser:
         self.current_address += total_size
         # Consume label identifier token
         self._advance()
+
+    def _handle_conditional_q_lbrace_block(self):
+        """
+        Handle the ?{ ... } conditional block.
+
+        Assumes current_token is '?' and the next token has already been verified to be '{'.
+        """
+        # The '?' token
+        q_rune_token = self.current_token
+
+        # Size of the conditional jump mechanism based on uxnasm.c
+        # (LIT2 offset JCI)
+        jump_mechanism_size = 4
+        logger.debug(f"  Conditional Block Start ?{{ :"
+                     f" jump mechanism size {jump_mechanism_size} bytes"
+                     f" (Line {q_rune_token.line})")
+        self.current_address += jump_mechanism_size
+
+        # Consume '?'
+        self._advance()
+
+        # current_token is now '{'
+        if not (self.current_token
+                and self.current_token.type == TOKENTYPE.RUNE_LBRACE):
+            # This should ideally not be hit if the dispatcher logic is correct
+            raise ParsingError("Internal Error: Expected '{' after '?'"
+                               " for conditional block.", token=q_rune_token)
+
+        lbrace_token = self.current_token
+        logger.debug(f"    Consuming '{{' (Line {lbrace_token.line})")
+        # Consume '{'
+        self._advance()
+
+        # Parse tokens INSIDE the block until '}' This loop now
+        # directly uses the main match/case logic by continuing the
+        # outer loop's job The outer loop will break when '}' is found
+        # or EOF.  We need a way to tell the outer loop or this
+        # function when '}' is encountered.  This requires a bit more
+        # thought. A simple way is to let this function loop
+        # internally using the dispatcher.
+
+        # Let's use an internal loop that calls a general token dispatcher
+        while (self.current_token is not None
+               and self.current_token.type != TOKENTYPE.RUNE_RBRACE):
+            if self.current_token.type == TOKENTYPE.EOF:
+                raise SyntaxError(f"Unclosed conditional block ?{{ "
+                                  f" starting on line {q_rune_token.line}."
+                                  f" Reached EOF before '}}'.",
+                                  token=q_rune_token)
+            self._dispatch_current_token_for_pass1()
+
+        if (self.current_token
+                and self.current_token.type == TOKENTYPE.RUNE_RBRACE):
+            logger.debug(f"  Conditional Block End }}"
+                         f" (Line {self.current_token.line})")
+            # Consume '}'
+            self._advance()
+        else:
+            raise SyntaxError(f"Unclosed conditional block ?{{"
+                              f" starting on line {q_rune_token.line}."
+                              f" Missing '}}'.",
+                              token=q_rune_token)
+
+    def _dispatch_current_token_for_pass1(self):
+        """Handle a single token based on its type during Pass 1."""
+        if self.current_token is None:
+            return
+
+        token_type = self.current_token.type
+
+        match token_type:
+            case TOKENTYPE.RUNE_PIPE:
+                self._handle_padding_rune()
+            case TOKENTYPE.RUNE_DOLLAR:
+                self._handle_padding_rune()
+            case TOKENTYPE.RUNE_AT:
+                self._handle_label_definition()
+            case TOKENTYPE.RUNE_AMPERSAND:
+                self._handle_label_definition()
+            case TOKENTYPE.RAW_ASCII_CHUNK:
+                self._handle_raw_ascii_chunk()
+            case TOKENTYPE.RUNE_HASH:
+                self._handle_hash_literal()
+            case TOKENTYPE.HEX_LITERAL:
+                self._handle_standalone_hex_data()
+            case TOKENTYPE.RUNE_SEMICOLON:
+                self._handle_addressing_rune_op(
+                    ';', self.get_opcode_byte("LIT2"), 2
+                )
+            case TOKENTYPE.RUNE_QUESTION:
+                self._handle_addressing_rune_op(
+                    '?', self.get_opcode_byte("JCI"), 2
+                )
+            case TOKENTYPE.RUNE_EXCLAIM:
+                self._handle_addressing_rune_op(
+                    '!', self.get_opcode_byte("JMI"), 2
+                )
+            case TOKENTYPE.RUNE_COMMA:
+                self._handle_addressing_rune_op(
+                    ',', self.get_opcode_byte("LIT"), 1
+                )
+            case TOKENTYPE.RUNE_PERIOD:
+                self._handle_addressing_rune_op(
+                    '.', self.get_opcode_byte("LIT"), 1
+                )
+            case TOKENTYPE.IDENTIFIER:
+                self._handle_identifier_token()
+
+            # Handle delimiters that don't contribute to size but need
+            # to be consumed if not part of a larger structure already
+            # handled (like RUNE_RBRACE by conditional block)
+            case (TOKENTYPE.RUNE_LBRACE | TOKENTYPE.RUNE_RBRACE |
+                  TOKENTYPE.RUNE_LBRACKET | TOKENTYPE.RUNE_RBRACKET |
+                  TOKENTYPE.LPAREN | TOKENTYPE.RPAREN):
+                logger.debug(f"  Skipping Delimiter/Ignored Token: "
+                             f"'{self.current_token.word}' type: {token_type}"
+                             f" (Line {self.current_token.line})")
+                self._advance()
+            # Default case for any other unhandled token types
+            case _:
+                # This should ideally be an error for unexpected tokens.
+                raise SyntaxError(f"Unexpected token during dispatch:"
+                                  f" '{self.current_token.word}'",
+                                  token=self.current_token)
+                # logger.debug(...)
+                # self._advance()
 
     def _handle_raw_ascii_chunk(self):
         """Handle RAW_ASCII_CHUNK.
@@ -563,7 +695,7 @@ class Parser:
         self.current_address += data_size
         self._advance()
 
-    def _handle_identifier_or_opcode(self):
+    def _handle_identifier_token(self):
         """Handle identifiers or opcodes."""
         # Just get estimated size for now
         op_token = self.current_token
@@ -579,71 +711,34 @@ class Parser:
         if not self.tokens or self.tokens[0].type == TOKENTYPE.EOF:
             logger.debug('No tokens to parse.')
             return
-        if self.current_token is None and self.tokens:
+        if self.current_token is None and self.tokens: # Should be set by __init__
             self.current_token = self.tokens[0]
         try:
             while (self.current_token is not None
                    and self.current_token.type != TOKENTYPE.EOF):
-                token_type = self.current_token.type
-                match token_type:
-                    case TOKENTYPE.RUNE_PIPE:
-                        self._handle_padding_rune()
-                    case TOKENTYPE.RUNE_DOLLAR:
-                        self._handle_padding_rune()
-                    case TOKENTYPE.RUNE_AT:
-                        self._handle_label_definition()
-                    case TOKENTYPE.RUNE_AMPERSAND:
-                        self._handle_label_definition()
-                    case TOKENTYPE.RAW_ASCII_CHUNK:
-                        self._handle_raw_ascii_chunk()
-                    case TOKENTYPE.RUNE_HASH:
-                        self._handle_hash_literal()
-                    case TOKENTYPE.HEX_LITERAL:
-                        self._handle_standalone_hex_data()
-                    case TOKENTYPE.RUNE_SEMICOLON:
-                        self._handle_addressing_rune_op(
-                            ';',
-                            self.get_opcode_byte("LIT2"), 2
-                        )
-                    case TOKENTYPE.RUNE_QUESTION:
-                        self._handle_addressing_rune_op(
-                            '?',
-                            self.get_opcode_byte("JCI"), 2
-                        )
-                    case TOKENTYPE.RUNE_EXCLAIM:
-                        self._handle_addressing_rune_op(
-                            '!',
-                            self.get_opcode_byte("JMI"), 2
-                        )
-                    case TOKENTYPE.RUNE_COMMA:
-                        self._handle_addressing_rune_op(
-                            ',',
-                            self.get_opcode_byte("LIT"), 1
-                        )
-                    case TOKENTYPE.RUNE_PERIOD:
-                        self._handle_addressing_rune_op(
-                            '.',
-                            self.get_opcode_byte("LIT"), 1
-                        )
-                    case TOKENTYPE.IDENTIFIER:
-                        self._handle_identifier_or_opcode()
-                    case _:
-                        logging.debug(' Skipping unhandled token: "%s"'
-                                      ' type: %s (Line %s)',
-                                      self.current_token.word,
-                                      token_type,
-                                      self.current_token.line)
-                        self._advance()
-
+                # Special check for ?{ construct
+                if self.current_token.type == TOKENTYPE.RUNE_QUESTION:
+                    next_t = self._peek_token(1)
+                    if next_t and next_t.type == TOKENTYPE.RUNE_LBRACE:
+                        self._handle_conditional_q_lbrace_block()
+                        # _handle_conditional_q_lbrace_block consumes tokens including '}',
+                        # so we continue to the next iteration of the while loop.
+                        continue
+                # For all other cases, use the general dispatcher
+                self._dispatch_current_token_for_pass1()
         except ParsingError as pe:
-            logging.error(pe)
+            logger.error(str(pe)) # Use the __str__ method of your custom exception
+            logger.debug("Parser Pass 1 aborted due to error.") # Add this for clarity
+            # Consider re-raising or returning an error status if parse_pass1 is called by other code
+
+        # This part is outside the try...except, will run even if an error occurred mid-way
+        # which might be okay for seeing partial results, or you can move it inside the try.
+        # Or only print if no error occurred by checking a flag.
         logger.debug("Parser Pass 1 Finished.")
         logger.debug("Symbol Table:")
         for label, address in self.symbol_table.items():
             logger.debug(f"\t {label}: 0x{address:04x}")
-        logger.debug(f"Final Calculated Address (approx)"
-                     f": 0x{self.current_address:04x}")
-
+        logger.debug(f"Final Calculated Address (after pass 1 processing): 0x{self.current_address:04x}")
 
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
