@@ -513,15 +513,25 @@ class Parser:
                 self._handle_addressing_rune_op(
                     '.', self.get_opcode_byte("LIT"), 1
                 )
+            case TOKENTYPE.RUNE_LBRACE:
+                # For raw { ... }
+                self._handle_raw_hex_data_block()
+
+            case TOKENTYPE.RUNE_LBRACKET:
+                # For raw [ ... ] (ignored)
+                self._handle_ignored_block(self)
+
             case TOKENTYPE.IDENTIFIER:
                 self._handle_identifier_token()
 
+            case TOKENTYPE.RUNE_RBRACE | TOKENTYPE.RUNE_RBRACKET:
+                raise SyntaxError(f"Unexpected closing delimiter"
+                                  f" '{self.current_token.word}'",
+                                  token=self.current_token)
             # Handle delimiters that don't contribute to size but need
             # to be consumed if not part of a larger structure already
             # handled (like RUNE_RBRACE by conditional block)
-            case (TOKENTYPE.RUNE_LBRACE | TOKENTYPE.RUNE_RBRACE |
-                  TOKENTYPE.RUNE_LBRACKET | TOKENTYPE.RUNE_RBRACKET |
-                  TOKENTYPE.LPAREN | TOKENTYPE.RPAREN):
+            case (TOKENTYPE.LPAREN | TOKENTYPE.RPAREN):
                 logger.debug(f"  Skipping Delimiter/Ignored Token: "
                              f"'{self.current_token.word}' type: {token_type}"
                              f" (Line {self.current_token.line})")
@@ -693,6 +703,14 @@ class Parser:
                      data_token.line)
         self.current_address += data_size
         self._advance()
+
+    def _handle_raw_hex_data_block(self):
+        """Handle raw hex data blocks {}."""
+        raise NotImplementedError
+
+    def _handle_ignored_block(self):
+        """Handle ignored blocks []."""
+        raise NotImplementedError
 
     def _handle_identifier_token(self):
         """Handle identifiers or opcodes."""
