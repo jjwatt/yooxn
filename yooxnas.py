@@ -538,44 +538,58 @@ class Parser:
             self._advance()
 
     def _handle_conditional_q_lbrace_block(self):
-        q_rune_token = self.current_token # The '?' token
+        """Handle the ?{ ... } conditional block.
+
+        Assumes current_token is '?' and the next token is '{'.
+        """
+        # The '?' token
+        q_rune_token = self.current_token
         # Size of the conditional jump mechanism:
         # 1 byte for JCI-like opcode (e.g., uxnasm.c uses 0x20)
-        # 2 bytes for the 16-bit relative offset placeholder (to jump past the block)
+        # 2 bytes for the 16-bit relative offset placeholder (to jump
+        # past the block)
         jump_mechanism_size = 3
-        logger.debug(f"  Conditional Block Start ?{{ : jump mechanism size {jump_mechanism_size} bytes (Line {q_rune_token.line})")
+        logger.debug(f"  Conditional Block Start ?{{ : jump mechanism"
+                     f" size {jump_mechanism_size} bytes"
+                     f" (Line {q_rune_token.line})")
         self.current_address += jump_mechanism_size
+        # Consume '?'
+        self._advance()
 
-        self._advance() # Consume '?'
-
-        if not (self.current_token and self.current_token.type == TOKENTYPE.RUNE_LBRACE):
-            raise ParsingError("Internal Error: Expected '{' after '?' for conditional block.", token=q_rune_token)
+        if not (self.current_token and
+                self.current_token.type == TOKENTYPE.RUNE_LBRACE):
+            raise ParsingError("Internal Error: Expected '{' after '?'"
+                               " for conditional block.", token=q_rune_token)
 
         lbrace_token = self.current_token
         logger.debug(f"    Consuming '{{' (Line {lbrace_token.line})")
-        self._advance() # Consume '{'
+        # Consume '{'
+        self._advance()
 
         # Parse tokens INSIDE the block until '}'
-        # (Using _dispatch_current_token_for_pass1() in a loop as previously discussed)
-        while self.current_token is not None and self.current_token.type != TOKENTYPE.RUNE_RBRACE:
+        # (Using _dispatch_current_token_for_pass1() in a loop)
+        while (self.current_token is not None
+               and self.current_token.type != TOKENTYPE.RUNE_RBRACE):
             if self.current_token.type == TOKENTYPE.EOF:
-                raise SyntaxError(f"Unclosed conditional block ?{{ starting on line {q_rune_token.line}. Reached EOF before '}}'.",
-                                  token=q_rune_token) # Or pass last good token
+                raise SyntaxError(f"Unclosed conditional block ?{{"
+                                  f" starting on line {q_rune_token.line}."
+                                  " Reached EOF before '}}'.",
+                                  token=q_rune_token)
             self._dispatch_current_token_for_pass1()
 
-        if self.current_token and self.current_token.type == TOKENTYPE.RUNE_RBRACE:
-            logger.debug(f"  Conditional Block End }} (Line {self.current_token.line})")
-            self._advance() # Consume '}'
+        if (self.current_token
+                and self.current_token.type == TOKENTYPE.RUNE_RBRACE):
+            logger.debug(f"  Conditional Block End }}"
+                         f" (Line {self.current_token.line})")
+            # Consume '}'
+            self._advance()
         else:
-            raise SyntaxError(f"Unclosed conditional block ?{{ starting on line {q_rune_token.line}. Missing '}}'.",
-                              token=q_rune_token) # Or pass last good token
+            raise SyntaxError(f"Unclosed conditional block ?{{"
+                              f" starting on line {q_rune_token.line}."
+                              " Missing '}}'.",
+                              token=q_rune_token)
 
     def _old_handle_conditional_q_lbrace_block(self):
-        """
-        Handle the ?{ ... } conditional block.
-
-        Assumes current_token is '?' and the next token has already been verified to be '{'.
-        """
         # The '?' token
         q_rune_token = self.current_token
 
