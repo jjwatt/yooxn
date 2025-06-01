@@ -322,11 +322,12 @@ class Parser:
         """
         Parse tokens within an anonymous { } block until a matching '}'.
 
-        Relies on the main dispatcher _dispatch_current_token_for_pass1 to handle content.
-        Advances self.current_address based on the content.
-        Consumes the closing '}'.
+        Relies on the main dispatcher _dispatch_current_token_for_pass1
+        to handle content. Advances self.current_address based on the
+        content. Consumes the closing '}'.
         """
-        logger.debug(f"    Entering anonymous block started on line {open_brace_line}")
+        logger.debug(f"  Entering anonymous block started on line"
+                     f" {open_brace_line}")
         depth = 1
         while self.current_token is not None:
             # Nested block
@@ -363,9 +364,9 @@ class Parser:
 
             elif self.current_token.type == TOKENTYPE.EOF:
                 if self.token_idx < len(self.tokens):
-                    token = self.token_idx
+                    token = self.tokens[self.token_idx]
                 else:
-                    token = -1
+                    token = self.tokens[-1]
                 raise SyntaxError(f"Unclosed anonymous block {{"
                                   f" starting on line {open_brace_line}."
                                   " Reached EOF.",
@@ -374,9 +375,15 @@ class Parser:
                 # Dispatch to handle the actual content of the block
                 self._dispatch_current_token_for_pass1()
 
-        # If loop terminates due to self.current_token being None (should be caught by EOF above)
-        raise SyntaxError(f"Unclosed anonymous block {{ starting on line {open_brace_line}.",
-                          token=self.tokens[self.token_idx if self.token_idx < len(self.tokens) else -1])
+        # If loop terminates due to self.current_token being None (should be
+        # caught by EOF above)
+        if self.token_idx < len(self.tokens):
+            token = self.tokens[self.token_idx]
+        else:
+            token = self.tokens[-1]
+        raise SyntaxError(f"Unclosed anonymous block {{"
+                          f" starting on line {open_brace_line}.",
+                          token=token)
 
     def _handle_padding_rune(self):
         """Handle '|' and '$' runes."""
