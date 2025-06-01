@@ -589,63 +589,6 @@ class Parser:
                               " Missing '}}'.",
                               token=q_rune_token)
 
-    def _old_handle_conditional_q_lbrace_block(self):
-        # The '?' token
-        q_rune_token = self.current_token
-
-        # Size of the conditional jump mechanism based on uxnasm.c
-        # (LIT2 offset JCI)
-        jump_mechanism_size = 4
-        logger.debug(f"  Conditional Block Start ?{{ :"
-                     f" jump mechanism size {jump_mechanism_size} bytes"
-                     f" (Line {q_rune_token.line})")
-        self.current_address += jump_mechanism_size
-
-        # Consume '?'
-        self._advance()
-
-        # current_token is now '{'
-        if not (self.current_token
-                and self.current_token.type == TOKENTYPE.RUNE_LBRACE):
-            # This should ideally not be hit if the dispatcher logic is correct
-            raise ParsingError("Internal Error: Expected '{' after '?'"
-                               " for conditional block.", token=q_rune_token)
-
-        lbrace_token = self.current_token
-        logger.debug(f"    Consuming '{{' (Line {lbrace_token.line})")
-        # Consume '{'
-        self._advance()
-
-        # Parse tokens INSIDE the block until '}' This loop now
-        # directly uses the main match/case logic by continuing the
-        # outer loop's job The outer loop will break when '}' is found
-        # or EOF.  We need a way to tell the outer loop or this
-        # function when '}' is encountered.  This requires a bit more
-        # thought. A simple way is to let this function loop
-        # internally using the dispatcher.
-
-        # Let's use an internal loop that calls a general token dispatcher
-        while (self.current_token is not None
-               and self.current_token.type != TOKENTYPE.RUNE_RBRACE):
-            if self.current_token.type == TOKENTYPE.EOF:
-                raise SyntaxError(f"Unclosed conditional block ?{{ "
-                                  f" starting on line {q_rune_token.line}."
-                                  f" Reached EOF before '}}'.",
-                                  token=q_rune_token)
-            self._dispatch_current_token_for_pass1()
-
-        if (self.current_token
-                and self.current_token.type == TOKENTYPE.RUNE_RBRACE):
-            logger.debug(f"  Conditional Block End }}"
-                         f" (Line {self.current_token.line})")
-            # Consume '}'
-            self._advance()
-        else:
-            raise SyntaxError(f"Unclosed conditional block ?{{"
-                              f" starting on line {q_rune_token.line}."
-                              f" Missing '}}'.",
-                              token=q_rune_token)
-
     def _dispatch_current_token_for_pass1(self):
         """Handle a single token based on its type during Pass 1."""
         if self.current_token is None:
