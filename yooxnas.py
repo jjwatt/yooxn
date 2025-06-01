@@ -364,9 +364,8 @@ class Parser:
                 self._dispatch_current_token_for_pass1()
 
         # If loop terminates due to self.current_token being None (should be caught by EOF above)
-        raise SyntaxError(f"Unclosed anonymous block {{ starting on line {open_brace_line}.", 
+        raise SyntaxError(f"Unclosed anonymous block {{ starting on line {open_brace_line}.",
                           token=self.tokens[self.token_idx if self.token_idx < len(self.tokens) else -1])
-
 
     def _handle_padding_rune(self):
         """Handle '|' and '$' runes."""
@@ -404,7 +403,49 @@ class Parser:
             self.current_address += val
         self._advance()
 
-    def _handle_literal_addressing_rune_op(self,
+    def _handle_literal_addressing_rune_op(self, rune_char_expected: str, implied_opcode_byte_for_print: int, placeholder_size: int):
+        rune_token = self.current_token
+        self._advance() # Consume the main addressing rune (';', '?', '!', ',', '.')
+
+        # Size for the operation prefix (e.g., LIT2 + placeholder, or JMI + placeholder)
+        prefix_operation_size = 1 + placeholder_size
+
+        if self.current_token and self.current_token.type == TOKENTYPE.RUNE_LBRACE:
+            # Operand is an anonymous block { ... }
+            lbrace_token = self.current_token
+            logger.debug(f"  Addressing Rune Op: {rune_token.word}{{...}} detected (Line {rune_token.line})")
+            logger.debug(f"    Prefix operation {rune_token.word}{{ contributes {prefix_operation_size} bytes. PC from 0x{self.current_address:04x}")
+            self.current_address += prefix_operation_size
+            logger.debug(f"    ...to 0x{self.current_address:04x}. Now parsing block content.")
+
+            self._advance() # Consume '{'
+            self._parse_anonymous_block_content(lbrace_token.line) # This will parse until '}' and advance PC for content
+            # The address "provided" by { is self.current_address (which is now after the '}')
+            # This address would be used in Pass 2 to fill the placeholder.
+        else:
+            # Operand is a standard label (&label or label)
+            # (Your existing logic for this part)
+            is_sub_label_syntax = False
+            label_prefix = ""
+            if self.current_token and self.current_token.type == TOKENTYPE.RUNE_AMPERSAND:
+                is_sub_label_syntax = True
+                label_prefix = "&"
+                self._advance()
+
+            if not (self.current_token and self.current_token.type == TOKENTYPE.IDENTIFIER):
+                raise SyntaxError(f"Expected label name or '{{' after rune '{rune_token.word}'.", token=rune_token)
+
+            label_identifier_token = self.current_token
+            base_label_name = label_identifier_token.word
+            displayed_label = f"{label_prefix}{base_label_name}"
+
+            logger.debug(f"  Addressing Rune Op: {rune_token.word}{displayed_label}, "
+                         f"implies [Opcode 0x{implied_opcode_byte_for_print:02x} + {placeholder_size}b placeholder], "
+                         f"total size {prefix_operation_size} (Line {rune_token.line})")
+            self.current_address += prefix_operation_size
+            self._advance() # Consume label IDENTIFIER
+
+    def _old_handle_literal_addressing_rune_op(self,
                                            rune_char: str,
                                            implied_opcode_byte: int,
                                            placeholder_size: int):
@@ -461,7 +502,46 @@ class Parser:
         # Consume label identifier token
         self._advance()
 
-    def _handle_raw_addressing_rune_op(self, rune_char: str, placeholder_size: int):
+    def _handle_raw_addressing_rune_op(self,
+                                       rune_char_for_log: str,
+                                       placeholder_size: int):
+        rune_token = self.current_token
+        self._advance() # Consume the raw addressing rune ('_', '-', '=')
+
+        # Size for the operation prefix (just the placeholder for raw modes)
+        prefix_operation_size = placeholder_size
+
+        if self.current_token and self.current_token.type == TOKENTYPE.RUNE_LBRACE:
+            # Operand is an anonymous block { ... }
+            lbrace_token = self.current_token
+            logger.debug(f"  Raw Addressing Rune Op: {rune_token.word}{{...}} detected (Line {rune_token.line})")
+            logger.debug(f"    Prefix operation {rune_token.word}{{ contributes {prefix_operation_size} bytes for placeholder. PC from 0x{self.current_address:04x}")
+            self.current_address += prefix_operation_size
+            logger.debug(f"    ...to 0x{self.current_address:04x}. Now parsing block content.")
+
+            self._advance() # Consume '{'
+            self._parse_anonymous_block_content(lbrace_token.line)
+        else:
+            # Operand is a standard label (&label or label)
+            # (Your existing logic for this part)
+            is_sub_label_syntax = False
+            label_prefix = ""
+            if self.current_token and self.current_token.type == TOKENTYPE.RUNE_AMPERSAND:
+                is_sub_label_syntax = True
+                label_prefix = "&"
+                self._advance()
+            if not (self.current_token and self.current_token.type == TOKENTYPE.IDENTIFIER):
+                raise SyntaxError(f"Expected label name or '{{' after rune '{rune_token.word}'.", token=rune_token)
+            label_identifier_token = self.current_token
+            base_label_name = label_identifier_token.word
+            displayed_label = f"{label_prefix}{base_label_name}"
+
+            logger.debug(f"  Raw Addressing Rune Op: {rune_token.word}{displayed_label}, "
+                         f"reserves {placeholder_size}-byte placeholder, total size {prefix_operation_size} (Line {rune_token.line})")
+            self.current_address += prefix_operation_size
+            self._advance() # Consume label IDENTIFIER
+
+    def _old_handle_raw_addressing_rune_op(self, rune_char: str, placeholder_size: int):
         """Handle raw addressing runes like '_', '-', and '='.
 
         These directly reserve placeholder_size bytes for an address/offset.
@@ -509,6 +589,39 @@ class Parser:
         self._advance()
 
     def _handle_conditional_q_lbrace_block(self):
+        q_rune_token = self.current_token # The '?' token
+        # Size of the conditional jump mechanism:
+        # 1 byte for JCI-like opcode (e.g., uxnasm.c uses 0x20)
+        # 2 bytes for the 16-bit relative offset placeholder (to jump past the block)
+        jump_mechanism_size = 3
+        logger.debug(f"  Conditional Block Start ?{{ : jump mechanism size {jump_mechanism_size} bytes (Line {q_rune_token.line})")
+        self.current_address += jump_mechanism_size
+
+        self._advance() # Consume '?'
+
+        if not (self.current_token and self.current_token.type == TOKENTYPE.RUNE_LBRACE):
+            raise ParsingError("Internal Error: Expected '{' after '?' for conditional block.", token=q_rune_token)
+
+        lbrace_token = self.current_token
+        logger.debug(f"    Consuming '{{' (Line {lbrace_token.line})")
+        self._advance() # Consume '{'
+
+        # Parse tokens INSIDE the block until '}'
+        # (Using _dispatch_current_token_for_pass1() in a loop as previously discussed)
+        while self.current_token is not None and self.current_token.type != TOKENTYPE.RUNE_RBRACE:
+            if self.current_token.type == TOKENTYPE.EOF:
+                raise SyntaxError(f"Unclosed conditional block ?{{ starting on line {q_rune_token.line}. Reached EOF before '}}'.",
+                                  token=q_rune_token) # Or pass last good token
+            self._dispatch_current_token_for_pass1()
+
+        if self.current_token and self.current_token.type == TOKENTYPE.RUNE_RBRACE:
+            logger.debug(f"  Conditional Block End }} (Line {self.current_token.line})")
+            self._advance() # Consume '}'
+        else:
+            raise SyntaxError(f"Unclosed conditional block ?{{ starting on line {q_rune_token.line}. Missing '}}'.",
+                              token=q_rune_token) # Or pass last good token
+
+    def _old_handle_conditional_q_lbrace_block(self):
         """
         Handle the ?{ ... } conditional block.
 
