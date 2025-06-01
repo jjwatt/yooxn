@@ -318,6 +318,56 @@ class Parser:
             return None
         return 0x01
 
+    def _parse_anonymous_block_content(self, open_brace_line: int):
+        """
+        Parse tokens within an anonymous { } block until a matching '}'.
+
+        Relies on the main dispatcher _dispatch_current_token_for_pass1 to handle content.
+        Advances self.current_address based on the content.
+        Consumes the closing '}'.
+        """
+        logger.debug(f"    Entering anonymous block started on line {open_brace_line}")
+        depth = 1
+        while self.current_token is not None:
+            # Nested block
+            if self.current_token.type == TOKENTYPE.RUNE_LBRACE:
+                depth += 1
+                logger.debug(f"    Nested '{{' found, depth now {depth}"
+                             f" (Line {self.current_token.line})")
+                # The _dispatch_current_token_for_pass1 called below
+                # will handle this if RUNE_LBRACE is an error or leads
+                # to another block construct. For now, we assume an
+                # outer operator initiates a new anonymous block.
+                # This _parse_anonymous_block_content is primarily for
+                # the *content* after an operator like `;{`.  If a new
+                # `;{` appears inside, its handler would call this
+                # again.  For now, just dispatch it.
+                self._dispatch_current_token_for_pass1()
+
+            elif self.current_token.type == TOKENTYPE.RUNE_RBRACE:
+                depth -= 1
+                logger.debug(f"    Found '}}', depth now {depth}"
+                             f" (Line {self.current_token.line})")
+                if depth == 0:
+                    self._advance() # Consume the final '}'
+                    logger.debug(f"    Exiting anonymous block. PC is now 0x{self.current_address:04x}")
+                    return # Successfully parsed and closed the block
+                else: # Closing a nested block
+                    self._dispatch_current_token_for_pass1() # Let dispatcher handle/skip '}' if it's just a delimiter
+                                                            # Or, if '}' is always just consumed: self._advance()
+
+            elif self.current_token.type == TOKENTYPE.EOF:
+                raise SyntaxError(f"Unclosed anonymous block {{ starting on line {open_brace_line}. Reached EOF.",
+                                  token=self.tokens[self.token_idx if self.token_idx < len(self.tokens) else -1])
+            else:
+                # Dispatch to handle the actual content of the block
+                self._dispatch_current_token_for_pass1()
+
+        # If loop terminates due to self.current_token being None (should be caught by EOF above)
+        raise SyntaxError(f"Unclosed anonymous block {{ starting on line {open_brace_line}.", 
+                          token=self.tokens[self.token_idx if self.token_idx < len(self.tokens) else -1])
+
+
     def _handle_padding_rune(self):
         """Handle '|' and '$' runes."""
         rune_token = self.current_token
