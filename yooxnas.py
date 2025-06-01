@@ -9,6 +9,56 @@ logging.basicConfig(level=logging.DEBUG,
                     format="%(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
+# Base opcodes (index corresponds to bits 0-4 of the opcode byte)
+# LIT is special, its effective base is 0x80 (LITk) if no other mode.
+_BASE_OPCODES_LIST = [
+    "LIT", "INC", "POP", "NIP", "SWP", "ROT", "DUP", "OVR",
+    "EQU", "NEQ", "GTH", "LTH", "JMP", "JCN", "JSR", "STH",
+    "LDZ", "STZ", "LDR", "STR", "LDA", "STA", "DEI", "DEO",
+    "ADD", "SUB", "MUL", "DIV", "AND", "ORA", "EOR", "SFT"
+    # BRK is a standalone opcode, usually 0x00
+]
+
+_BASE_OPCODE_MAP = {name: i for i, name in enumerate(_BASE_OPCODES_LIST)}
+
+
+def get_opcode_byte(mnemonic: str) -> int | None:
+    """Get the uxn opcode byte by name."""
+    mnemonic_upper = mnemonic.upper()
+    if mnemonic_upper == "BRK":
+        return 0x00
+
+    base_op_str = mnemonic_upper[:3]
+    modes_str = mnemonic_upper[3:]
+
+    if base_op_str not in _BASE_OPCODE_MAP:
+        return None
+
+    opcode_val = _BASE_OPCODE_MAP[base_op_str]
+
+    if base_op_str == "LIT":
+        # LIT is index 0
+        # Start LIT as 0x80 (LITk) (its default)
+        opcode_val = 0x80
+        # Modes will be ORed onto this. 'K' mode would be redundant but
+        # harmless. '2' would make it 0xA0. 'R' would make it 0xC0.
+
+    # Apply modes for all opcodes
+    for mode_char in modes_str:
+        if mode_char == '2':
+            opcode_val |= 0x20
+        elif mode_char == 'R':
+            opcode_val |= 0x40
+        elif mode_char == 'K':
+            # For LIT, this is already set if it was plain LIT or became 0x80.
+            # For others, it sets the keep bit.
+            opcode_val |= 0x80
+        else:
+            # Invalid mode
+            return None
+
+    return opcode_val
+
 
 class TOKENTYPE(Enum):
     """Token Type."""
@@ -39,6 +89,7 @@ class TOKENTYPE(Enum):
     RPAREN = auto()
     HEX_LITERAL = auto()
     IDENTIFIER = auto()
+    OPCODE = auto()
     WHITESPACE = auto()
     NEWLINE = auto()
     COMMENT = auto()
@@ -50,15 +101,27 @@ class TOKENTYPE(Enum):
 class Token:
     """Tokens emitted by the Lexer."""
 
-    def __init__(self, token_type: TOKENTYPE, word: str, line: int):
+    def __init__(self,
+                 token_type: TOKENTYPE,
+                 word: str,
+                 line: int,
+                 value: int | str | None = None):
         """Initialize a token of token_type."""
         self.type = token_type
         self.word = word
         self.line = line
+        self.value = value
 
     def print(self):
         """Print the token."""
-        print(f"'{self.word}': [TOKEN_{self.type.name}]")
+        if isinstance(self.value, int):
+            value_str = f", Value: {self.value:#04x}"
+        elif self.value is not None:
+            value_str = f", Value: '{self.value}'"
+        else:
+            value_str = ""
+        logger.debug(f"'{self.word}': [TOKEN_{self.type.name}{value_str}]"
+                     f" (Line {self.line})")
 
 
 class Lexer:
@@ -99,12 +162,28 @@ class Lexer:
             return '\0'
         return self.src[self.cursor + 1]
 
-    def _add_token(self, token_type: TOKENTYPE, word: str | None = None):
+    def _add_token(self, token_type: TOKENTYPE,
+                   word: str | None = None,
+                   value: int | str | None = None):
         if word is None:
             word = self.src[self.start:self.cursor]
-        # logger.debug(f"LEXER: Creating Token: Type={token_type.name},"
-        #              f"Word='{word}', Line={self.line}, Cursor={self.cursor}")
-        return Token(token_type, word, self.line)
+        log_parts = [
+            f"Type={token_type.name}",
+            f"Word='{word}'"
+        ]
+        if value is not None:
+            if isinstance(value, int):
+                log_parts.append(f"Value={value:#04x}")
+            elif isinstance(value, str):
+                log_parts.append(f"Value='{value}'")
+            else:
+                log_parts.append(f"Value={repr(value)}")
+
+        log_parts.append(f"Line={self.line}")
+        log_parts.append(f"Cursor={self.cursor}")
+        logger.debug(f"LEXER: Creating Token:"
+                     f" {', '.join(log_parts)}")
+        return Token(token_type, word, self.line, value)
 
     def _skip_whitespace_and_comments(self):
         """Skip whitespace and comments in the tokenizer."""
@@ -113,9 +192,6 @@ class Lexer:
             if char in ' \t\r':
                 self._advance()
             elif char == '\n':
-                # logger.debug(f"LEXER: Newline char encountered. "
-                #              f"Advancing line from {self.line} to {self.line + 1}. "
-                #              f"Cursor: {self.cursor}")
                 self.line += 1
                 self._advance()
             # Start block comment
@@ -131,7 +207,8 @@ class Lexer:
                     self._advance()
                 else:
                     # TODO: Handle unclosed comment
-                    logger.warning(f"Warning: unclosed comment on line {self.line}")
+                    logger.warning(f"Warning: unclosed comment"
+                                   f" on line {self.line}")
             else:
                 # Found a non-whitespace/non-comment char
                 break
@@ -140,7 +217,15 @@ class Lexer:
         return char.isalnum() or char in ['_', '/', '-']
 
     def _is_hex_digit(self, char: str) -> bool:
-        return ('0' <= char.lower() <= '9' or 'a' <= char.lower() <= 'f')
+        """Check if a char is a valid hexidecimal digit."""
+        if not char:
+            return False
+        char_lower = char.lower()
+        return ('0' <= char_lower <= '9' or 'a' <= char_lower <= 'f')
+
+    def _is_purely_hex(self, word: str) -> bool:
+        return all(self._is_hex_digit(char)
+                   for char in word)
 
     def scan_token(self) -> Token:
         """Scan a single token."""
@@ -184,25 +269,45 @@ class Lexer:
                 return self._add_token(TOKENTYPE.RAW_ASCII_CHUNK)
 
             case c if c.isalpha():
-                # Greedily consume all characters that can be part of an
-                # identifier (alphanumeric, plus '_', '/', '-')
-                # TODO: I already consume some of these as runes first.
-                # Figure out what exactly I should do with them later.
+                # c is the first char.
+                # self.start points to it. self.cursor is 1 position after it.
+
+                # Greedily consume all characters that can form an
+                # identifier/opcode word.
                 while (not self._is_at_end() and
                        (self._peek().isalnum()
                         or self._peek() in ['_', '/', '-'])):
                     self._advance()
-                return self._add_token(TOKENTYPE.IDENTIFIER)
+                word = self.src[self.start:self.cursor]
 
-            # 3. Hex Literals
+                # Check if it's a known opcode.
+                opcode_val = get_opcode_byte(word)
+                if opcode_val is not None:
+                    return self._add_token(TOKENTYPE.OPCODE,
+                                           word,
+                                           value=opcode_val)
+
+                # If not an Opcode, check if it's purely hex.
+                if word and self._is_purely_hex(word):
+                    if 1 <= len(word) <= 4:
+                        return self._add_token(
+                            TOKENTYPE.HEX_LITERAL,
+                            word
+                        )
+                # Otherwise it's a general IDENTIFIER.
+                return self._add_token(
+                    TOKENTYPE.IDENTIFIER,
+                    word
+                )
+            # Hex Literals starting with a digit.
             case c if c.isdigit():
                 # Consume all subsequent characters that are valid hex digits
                 # (0-9, a-f, A-F)
                 while (not self._is_at_end() and
-                       ('0' <= self._peek().lower() <= '9' or
-                        'a' <= self._peek().lower() <= 'f')):
+                       self._is_hex_digit(self._peek())):
                     self._advance()
-                return self._add_token(TOKENTYPE.HEX_LITERAL)
+                word = self.src[self.start:self.cursor]
+                return self._add_token(TOKENTYPE.HEX_LITERAL, word)
 
             # If none of the above matched the first character:
             case _:
@@ -443,7 +548,8 @@ class Parser:
         # JMI + placeholder)
         prefix_operation_size = 1 + placeholder_size
 
-        if self.current_token and self.current_token.type == TOKENTYPE.RUNE_LBRACE:
+        if (self.current_token
+                and self.current_token.type == TOKENTYPE.RUNE_LBRACE):
             # Operand is an anonymous block { ... }
             lbrace_token = self.current_token
             logger.debug(f"  Addressing Rune Op: {rune_token.word}{{...}}"
@@ -544,6 +650,16 @@ class Parser:
             # Consume label IDENTIFIER
             self._advance()
 
+    def _handle_opcode_token(self):
+        op_token = self.current_token
+        # They're all 1 byte
+        size = 1
+        logger.debug(f"  Opcode: {op_token.word}"
+                     f" (Byte: {op_token.value:#04x}),"
+                     f" size {size} (Line {op_token.line})")
+        self.current_address += size
+        self._advance()
+
     def _dispatch_current_token_for_pass1(self):
         """Handle a single token based on its type during Pass 1."""
         if self.current_token is None:
@@ -569,27 +685,29 @@ class Parser:
             # Literal Absolute pushes an absolute address short to label.
             case TOKENTYPE.RUNE_SEMICOLON:
                 self._handle_literal_addressing_rune_op(
-                    ';', self.get_opcode_byte("LIT2"), 2
+                    ';', get_opcode_byte("LIT2"), 2
                 )
             # Conditional Jump routine.
             case TOKENTYPE.RUNE_QUESTION:
                 self._handle_literal_addressing_rune_op(
-                    '?', self.get_opcode_byte("JCI"), 2
+                    # JCI is byte 0x20
+                    '?', 0x20, 2
                 )
             # Literal Jump routine.
             case TOKENTYPE.RUNE_EXCLAIM:
                 self._handle_literal_addressing_rune_op(
-                    '!', self.get_opcode_byte("JMI"), 2
+                    # JMI is 0x40
+                    '!', 0x40, 2
                 )
             # Literal Relative pushes a relative distance byte to the label.
             case TOKENTYPE.RUNE_COMMA:
                 self._handle_literal_addressing_rune_op(
-                    ',', self.get_opcode_byte("LIT"), 1
+                    ',', get_opcode_byte("LIT"), 1
                 )
             # Literal Zero-Page pushes an absolute address byte to the label.
             case TOKENTYPE.RUNE_PERIOD:
                 self._handle_literal_addressing_rune_op(
-                    '.', self.get_opcode_byte("LIT"), 1
+                    '.', get_opcode_byte("LIT"), 1
                 )
             # Raw addressing ops. These don't have implied opcodes.
             # Raw Relative writes a relative distance byte to the label.
@@ -616,6 +734,9 @@ class Parser:
                 logger.debug(f"  Ignoring Rune ']'"
                              f" (Line {self.current_token.line}")
                 self._advance()
+
+            case TOKENTYPE.OPCODE:
+                self._handle_opcode_token()
 
             case TOKENTYPE.IDENTIFIER:
                 self._handle_identifier_token()
@@ -886,7 +1007,9 @@ class Parser:
         logger.debug("Symbol Table:")
         for label, address in self.symbol_table.items():
             logger.debug(f"\t {label}: 0x{address:04x}")
-        logger.debug(f"Final Calculated Address (after pass 1 processing): 0x{self.current_address:04x}")
+        logger.debug(f"Final Calculated Address"
+                     f" (after pass 1 processing):"
+                     f" 0x{self.current_address:04x}")
 
 
 def parse_args() -> argparse.Namespace:
