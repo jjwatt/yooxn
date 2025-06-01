@@ -962,7 +962,7 @@ class Parser:
         word = id_token.word
         size = 0
 
-        if self.get_opcode_byte(word):
+        if get_opcode_byte(word):
             size = 1
             logger.debug(f"Opcode: '{word}', (size {size} byte)"
                          f" (Line {id_token.line})")
