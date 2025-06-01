@@ -1,0 +1,6 @@
+|0100
+[ LIT2 &last $1 -Mouse/state ] DEI DUP ,&last STR
+DUP2 #0001 NEQ2 ?{ ( on down ) }
+DUP2 #0101 NEQ2 ?{ ( on drag ) }
+DUP2 #0100 NEQ2 ?{ ( on release ) }
+POP2

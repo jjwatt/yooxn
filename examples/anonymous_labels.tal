@@ -1,0 +1,6 @@
+|0100
+@counted-string
+	_{ "foo 20 "bar }
+
+@linked-list
+	={ ={ "A } ={ "B ={ "C } } }
