@@ -418,6 +418,16 @@ class Parser:
                                            rune_char_expected: str,
                                            implied_opcode_byte: int,
                                            placeholder_size: int):
+        """
+        Handle runes like ';', '!', '?', ',' and '.'.
+
+        Handles runes like ;, !, ?, ,, . that imply an opcode and a placeholder
+        for an address/offset.
+        rune_char: The character itself (e.g., ';', '!')
+        implied_opcode_byte: The byte value of the opcode uxnasm.c writes
+                             (e.g., LIT2's opcode, JMI's 0x40)
+        placeholder_size: 1 for byte, 2 for short (0xff or 0xffff)
+        """
         rune_token = self.current_token
         # Consume the main addressing rune (';', '?', '!', ',', '.')
         self._advance()
@@ -471,63 +481,6 @@ class Parser:
             self.current_address += prefix_operation_size
             # Consume label IDENTIFIER
             self._advance()
-
-    def _old_handle_literal_addressing_rune_op(self,
-                                               rune_char: str,
-                                               implied_opcode_byte: int,
-                                               placeholder_size: int):
-        """
-        Handle runes like ';', '!', '?', ',' and '.'.
-
-        Handles runes like ;, !, ?, ,, . that imply an opcode and a placeholder
-        for an address/offset.
-        rune_char: The character itself (e.g., ';', '!')
-        implied_opcode_byte: The byte value of the opcode uxnasm.c writes
-                             (e.g., LIT2's opcode, JMI's 0x40)
-        placeholder_size: 1 for byte, 2 for short (0xff or 0xffff)
-        """
-        rune_token = self.current_token
-        if rune_token is None:
-            raise ParsingError("Internal Error:"
-                               " _handle_literal_addressing_rune_op"
-                               " called with no current token")
-        # Consume rune
-        self._advance()
-
-        is_sublabel_syntax = False
-        label_prefix = ""
-
-        # Check for '&' indicating a sublabel
-        if (self.current_token and
-                self.current_token.type == TOKENTYPE.RUNE_AMPERSAND):
-            is_sublabel_syntax = True
-            label_prefix = '&'
-            # Consume '&'
-            self._advance()
-
-        # Expect the main identifier part of the label
-        if not (self.current_token and
-                self.current_token.type == TOKENTYPE.IDENTIFIER):
-            if is_sublabel_syntax:
-                raise SyntaxError(f'Expected label identifier after'
-                                  f' {rune_token.word}&.',
-                                  token=rune_token)
-            else:
-                raise SyntaxError(f'Expected label name after'
-                                  f' {rune_token.word}.',
-                                  token=rune_token)
-        label_id_token = self.current_token
-        base_label_name = label_id_token.word
-
-        displayed_label = f'{label_prefix}{base_label_name}'
-        total_size = 1 + placeholder_size
-        logging.debug(f"Addressing Rune Op: {rune_token.word}{displayed_label}"
-                      f" -> [Opcode 0x{implied_opcode_byte:02x} +"
-                      f" {placeholder_size}-byte placeholder],"
-                      f" total size {total_size} (Line {rune_token.line})")
-        self.current_address += total_size
-        # Consume label identifier token
-        self._advance()
 
     def _handle_raw_addressing_rune_op(self,
                                        rune_char_for_log: str,
@@ -583,53 +536,6 @@ class Parser:
             self.current_address += prefix_operation_size
             # Consume label IDENTIFIER
             self._advance()
-
-    def _old_handle_raw_addressing_rune_op(self, rune_char: str, placeholder_size: int):
-        """Handle raw addressing runes like '_', '-', and '='.
-
-        These directly reserve placeholder_size bytes for an address/offset.
-        """
-        rune_token = self.current_token
-        if rune_token is None:
-            raise ParsingError("Internal error: _handle_raw_placeholder_op"
-                               " called with no current token.")
-        # Consume the raw addressing rune
-        self._advance()
-
-        is_sublabel_syntax = False
-        label_prefix = ""
-
-        # Check for '&' indicating a sublabel
-        if (self.current_token and
-                self.current_token.type == TOKENTYPE.RUNE_AMPERSAND):
-            is_sublabel_syntax = True
-            label_prefix = '&'
-            # Consume '&'
-            self._advance()
-
-        # Expect the main identifier part of the label
-        if not (self.current_token and
-                self.current_token.type == TOKENTYPE.IDENTIFIER):
-            if is_sublabel_syntax:
-                raise SyntaxError(f'Expected label identifier after'
-                                  f' {rune_token.word}&.',
-                                  token=rune_token)
-            else:
-                raise SyntaxError(f'Expected label name after'
-                                  f' {rune_token.word}.',
-                                  token=rune_token)
-        label_id_token = self.current_token
-        base_label_name = label_id_token.word
-        displayed_label = f'{label_prefix}{base_label_name}'
-
-        total_size = placeholder_size
-        logging.debug("Raw Addressing Rune Op:"
-                      f"{rune_token.word}{displayed_label}"
-                      f" reserves {placeholder_size}-byte placeholder],"
-                      f" total size {total_size} (Line {rune_token.line})")
-        self.current_address += total_size
-        # Consume the identifier token
-        self._advance()
 
     def _handle_conditional_q_lbrace_block(self):
         q_rune_token = self.current_token # The '?' token
