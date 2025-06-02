@@ -286,19 +286,12 @@ class Lexer:
                     return self._add_token(TOKENTYPE.OPCODE,
                                            word,
                                            value=opcode_val)
-
-                # If not an Opcode, check if it's purely hex.
-                if word and self._is_purely_hex(word):
-                    if 1 <= len(word) <= 4:
-                        return self._add_token(
-                            TOKENTYPE.HEX_LITERAL,
-                            word
-                        )
-                # Otherwise it's a general IDENTIFIER.
-                return self._add_token(
-                    TOKENTYPE.IDENTIFIER,
-                    word
-                )
+                else:
+                    # Otherwise it's a general IDENTIFIER.
+                    return self._add_token(
+                        TOKENTYPE.IDENTIFIER,
+                        word
+                    )
             # Hex Literals starting with a digit.
             case c if c.isdigit():
                 # Consume all subsequent characters that are valid hex digits
