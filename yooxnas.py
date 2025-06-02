@@ -268,7 +268,7 @@ class Lexer:
                     self._advance()
                 return self._add_token(TOKENTYPE.RAW_ASCII_CHUNK)
 
-            case c if c.isalpha():
+            case c if c.isalpha() or c == '_':
                 # c is the first char.
                 # self.start points to it. self.cursor is 1 position after it.
 
@@ -388,6 +388,7 @@ class Parser:
             self.current_token = self.tokens[0]
 
         self.symbol_table = {}
+        self.macros = {}
         # Start at 0. Uxn ROMs will usually set this to 0x0100
         self.current_address = 0x0000
         self.rom_bytes = bytearray()
@@ -741,6 +742,9 @@ class Parser:
             case TOKENTYPE.IDENTIFIER:
                 self._handle_identifier_token()
 
+            case TOKENTYPE.RUNE_PERCENT:
+                self._handle_macro_definition()
+
             case TOKENTYPE.RUNE_RBRACE | TOKENTYPE.RUNE_RBRACKET:
                 raise SyntaxError(f"Unexpected closing delimiter"
                                   f" '{self.current_token.word}'",
@@ -960,27 +964,107 @@ class Parser:
         """Handle identifiers or opcodes."""
         id_token = self.current_token
         word = id_token.word
-        size = 0
-
-        if get_opcode_byte(word):
-            size = 1
-            logger.debug(f"Opcode: '{word}', (size {size} byte)"
-                         f" (Line {id_token.line})")
+        if word in self.macros:
+            # It's a macro invocation.
+            self._handle_macro_invocation(word, id_token.line)
+            self._advance()
         else:
-            # A "bare word" not a known opcode or macro.  uxnasm.c
-            # treats this as a JSR-like call with 16-bit relative
-            # offset.
-            # Opcode (JSR-like e.g., 0x60 + 2-byte placeholder
+            # It's a bare word, not a known opcode or a macro.
+            # uxnasm.c treats this as a JSR-like call,
+            # with a 16-bit relative offset.
             size = 3
-            logger.debug(f" Bare word Call (to {word}),"
-                         f" size {size} bytes"
-                         f" (Line {id_token.line})")
-            # In Pass 2, this will involve makeref(word, ' ', ...) to
-            # resolve 'word' and writing the 0x60 opcode and the
-            # resolved 16-bit relative offset.
-        self.current_address += size
-        # Consume identifier
+            logger.debug(f"  Bare Word Call"
+                         f" (JSR-like to '{word}',)"
+                         f" size {size} bytes (Line {id_token.line})")
+            self.current_address += size
+            self._advance()
+
+    def _handle_macro_definition(self):
+        """Handle a macro definition: %name { tokens1 ... }.
+
+        Consumes tokens for the definition and stores the macro
+        name in its body (list of tokens).
+        """
+        # The % token
+        percent_token = self.current_token
+        logger.debug(f"Macro Def Start %"
+                     f" (Line {percent_token.line})")
+        # Consume the '%'
         self._advance()
+
+        # Parse the macro name.
+        if not (self.current_token
+                and self.current_token.type == TOKENTYPE.IDENTIFIER):
+            raise SyntaxError("Expected macro name (IDENTIFIER)"
+                              " after '%'.", token=percent_token)
+        macro_name_token = self.current_token
+        macro_name = macro_name_token.word
+        # Validate macro_name.
+        # TODO: More validation. uxnasm.c checks for hex, opcode, rune-start
+        # or empty.
+        if macro_name in self.macros:
+            raise SyntaxError(f"Duplicate macro definition for"
+                              f"'{macro_name}'.", token=percent_token)
+        if macro_name in self.symbol_table:
+            # TODO(jjwatt): Start doing filename:line:column for errors.
+            raise SyntaxError(f"Macro name '{macro_name}'"
+                              f" (Line {macro_name_token.line})"
+                              f" collides with existing label.")
+        logger.debug(f"Defining Macro: '{macro_name}'")
+        # Consume the macro name IDENTIFIER
+        self._advance()
+
+        # Expect and consume opening brace '{'
+        if not (self.current_token
+                and self.current_token.type == TOKENTYPE.RUNE_LBRACE):
+            if self.current_token:
+                token = self.current_token
+            else:
+                token = macro_name_token
+            raise SyntaxError(
+                f"Expected '{{' to start macro body for '{macro_name}'.",
+                token=token
+            )
+        lbrace_token = self.current_token
+        self._advance()
+        # Collect Macro Body Tokens
+        macro_body_tokens: list[Token] = []
+        nesting_depth = 1
+        while (self.current_token is not None
+               and self.current_token.type != TOKENTYPE.EOF):
+            # Disallow nested macro definitions
+            if self.current_token.type == TOKENTYPE.RUNE_PERCENT:
+                raise SyntaxError(f"Nested macro definitions are not allowed:"
+                                  f" '{macro_name}'.",
+                                  token=self.current_token)
+            if self.current_token.type == TOKENTYPE.RUNE_LBRACE:
+                nesting_depth += 1
+            elif self.current_token.type == TOKENTYPE.RUNE_RBRACE:
+                nesting_depth -= 1
+                if nesting_depth == 0:
+                    # Matching RBRACE for macro body
+                    self._advance()
+                    break
+            macro_body_tokens.append(self.current_token)
+            self._advance()
+        if nesting_depth != 0:
+            # We hit EOF or some other issue before closing brace.
+            raise SyntaxError(f"Unclosed macro body for '{macro_name}'."
+                              f" Expected '}}' to match '{{' on line"
+                              f" {lbrace_token.line}",
+                              token=lbrace_token)
+        # Store the macro
+        self.macros[macro_name] = macro_body_tokens
+        logger.debug(
+            f"    Stored macro '{macro_name}' with"
+            f" {len(macro_body_tokens)} tokens in its body.")
+
+        # PC (self.current_address) is NOT advanced for a macro def.
+
+    def _handle_macro_invocation(self,
+                                 macro_name: str,
+                                 invokation_line: int):
+        raise NotImplementedError
 
     def parse_pass1(self):
         """Parse tokens Pass #1."""
