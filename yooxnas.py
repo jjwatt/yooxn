@@ -492,7 +492,8 @@ class Parser:
         self._advance()
 
         if not (self.current_token and
-                self.current_token.type == TOKENTYPE.HEX_LITERAL):
+                (self.current_token.type == TOKENTYPE.HEX_LITERAL
+                 or self.current_token.type == TOKENTYPE.IDENTIFIER)):
             # TODO: looking up label in symbol_table
             raise SyntaxError(f"Expected hex literal after"
                               f"padding rune '{rune_char}'",
@@ -778,13 +779,22 @@ class Parser:
         """
         token = self.current_token
         if not (self.current_token and
-                self.current_token.type == TOKENTYPE.HEX_LITERAL):
+                (self.current_token.type == TOKENTYPE.HEX_LITERAL
+                 or self.current_token.type == TOKENTYPE.IDENTIFIER)):
             SyntaxError("Expected hex literal after #", token=token)
         # Consume '#'
         self._advance()
 
         hex_literal = self.current_token
         val = hex_literal.word
+
+        try:
+            # Test conversion to see if it's a valid number.
+            _ = int(val, 16)
+        except ValueError:
+            raise SyntaxError(f"Invalid hex value '{val}'"
+                              f" after '#'", token=self.current_token)
+
         val_len = len(val)
         size = 0
 
