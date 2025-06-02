@@ -4,6 +4,7 @@ import argparse
 import logging
 
 from enum import Enum, auto
+from pathlib import Path
 
 logging.basicConfig(level=logging.DEBUG,
                     format="%(levelname)s - %(message)s")
@@ -134,7 +135,7 @@ class Token:
 class Lexer:
     """Lexer for uxntal."""
 
-    def __init__(self, source: str):
+    def __init__(self, source: str,  filename: str | None = None):
         """Initialize a lexer.
 
         Args:
@@ -144,6 +145,7 @@ class Lexer:
             A new lexer object.
         """
         self.src = source
+        self.filename = Path(filename)
         self.size = len(source)
         # Current position in the input
         self.cursor = 0
@@ -331,23 +333,33 @@ class Lexer:
 class ParsingError(Exception):
     """Base class for errors during parsing."""
 
-    def __init__(self, message, line=None, word=None, token=None):
+    def __init__(self,
+                 message,
+                 line=None,
+                 word=None,
+                 token=None,
+                 filename=None):
         """Initialize a ParsingError."""
         super().__init__(message)
         self.line = line
         self.word = word
         self.token = token
+        self.filename = filename
         if token and line is None:
             self.line = token.line
         if token and word is None:
             self.word = token.word
 
-    # TODO: Make this return filename:line_no:column_no
     def __str__(self):
         """Get string version of a ParsingError."""
-        line_info = f' (Line {self.line})' if self.line is not None else ''
-        word_info = f', Token "{self.word}"' if self.word is not None else ''
-        return f'Parse Error{line_info}{word_info}: {super().__str__()}'
+        filename = self.filename or ''
+        line = self.line or ''
+        word = self.word or ''
+        # I don't have a good way to get the column yet This works in
+        # emacs, though. It will take you to the line in the file.
+        line_info = f'{filename}:{line}:,'
+        word_info = f' Token "{word}"'
+        return f'{line_info}{word_info}: {super().__str__()}'
 
 
 class SyntaxError(ParsingError):
@@ -376,7 +388,7 @@ class Parser:
         "BRK", "JCI", "JMI"
     ]])
 
-    def __init__(self, tokens: list[Token]):
+    def __init__(self, tokens: list[Token], filename: str | None = None):
         """Initialize a new parser object.
 
         Args:
@@ -387,6 +399,7 @@ class Parser:
         self.current_token: Token | None = None
         if self.tokens:
             self.current_token = self.tokens[0]
+        self.filename = Path(filename)
 
         self.symbol_table = {}
         self.macros = {}
@@ -764,7 +777,8 @@ class Parser:
                 # This should ideally be an error for unexpected tokens.
                 raise SyntaxError(f"Unexpected token during dispatch:"
                                   f" '{self.current_token.word}'",
-                                  token=self.current_token)
+                                  token=self.current_token,
+                                  filename=self.filename)
 
     def _handle_raw_ascii_chunk(self):
         """Handle RAW_ASCII_CHUNK.
@@ -1164,16 +1178,17 @@ def main():
     """Handle parsing args and calling assembler."""
     args = parse_args()
     if args.file:
+        file_path = Path(args.file)
         with open(args.file, 'r') as asmfile:
             source_code = asmfile.read()
-            lexer = Lexer(source_code)
+            lexer = Lexer(source_code, filename=file_path)
             tokens = lexer.scan_all_tokens()
             logger.debug("Finished tokenizing.")
             # for token in tokens:
             #     token.print()
 
             if tokens and tokens[-1].type != TOKENTYPE.ILLEGAL:
-                parser = Parser(tokens)
+                parser = Parser(tokens, filename=args.file)
                 parser.parse_pass1()
             else:
                 print("Lexer failed. Parsing skipped.")
