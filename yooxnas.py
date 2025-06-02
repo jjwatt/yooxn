@@ -24,12 +24,19 @@ _BASE_OPCODE_MAP = {name: i for i, name in enumerate(_BASE_OPCODES_LIST)}
 
 def get_opcode_byte(mnemonic: str) -> int | None:
     """Get the uxn opcode byte by name."""
-    mnemonic_upper = mnemonic.upper()
-    if mnemonic_upper == "BRK":
+    if mnemonic == "BRK":
         return 0x00
 
-    base_op_str = mnemonic_upper[:3]
-    modes_str = mnemonic_upper[3:]
+    if len(mnemonic) < 3:
+        return None
+
+    base_op_str = mnemonic[:3]
+    modes_str = mnemonic[3:]
+
+    # uxnasm.c does not match if base is not uppercase, so we
+    # won't either.
+    if base_op_str != base_op_str.upper():
+        return None
 
     if base_op_str not in _BASE_OPCODE_MAP:
         return None
@@ -40,16 +47,16 @@ def get_opcode_byte(mnemonic: str) -> int | None:
         # LIT is index 0
         # Start LIT as 0x80 (LITk) (its default)
         opcode_val = 0x80
-        # Modes will be ORed onto this. 'K' mode would be redundant but
-        # harmless. '2' would make it 0xA0. 'R' would make it 0xC0.
+        # Modes will be ORed onto this. 'k' mode would be redundant but
+        # harmless. '2' would make it 0xA0. 'r' would make it 0xC0.
 
     # Apply modes for all opcodes
     for mode_char in modes_str:
         if mode_char == '2':
             opcode_val |= 0x20
-        elif mode_char == 'R':
+        elif mode_char == 'r':
             opcode_val |= 0x40
-        elif mode_char == 'K':
+        elif mode_char == 'k':
             # For LIT, this is already set if it was plain LIT or became 0x80.
             # For others, it sets the keep bit.
             opcode_val |= 0x80
@@ -335,6 +342,7 @@ class ParsingError(Exception):
         if token and word is None:
             self.word = token.word
 
+    # TODO: Make this return filename:line_no:column_no
     def __str__(self):
         """Get string version of a ParsingError."""
         line_info = f' (Line {self.line})' if self.line is not None else ''
@@ -1066,8 +1074,51 @@ class Parser:
 
     def _handle_macro_invocation(self,
                                  macro_name: str,
-                                 invokation_line: int):
-        raise NotImplementedError
+                                 invocation_line: int):
+        """Process a macro invocation during Pass1.
+
+        Parse stored tokens to update current_address.
+        """
+        logger.debug(f"Invoking Macro: '{macro_name}'"
+                     f" (called on Line {invocation_line})")
+        if macro_name not in self.macros:
+            raise ParsingError(f"Attempted to invoke undefined macro"
+                               f" '{macro_name}'.", line=invocation_line)
+
+        macro_tokens: list[Token] = self.macros[macro_name]
+        if not macro_tokens:
+            logger.debug(f"  Macro '{macro_name}' is empty.")
+            return
+
+        logger.debug(f"    Expanding macro '{macro_name}'"
+                     f" with {len(macro_tokens)} tokens"
+                     f" Current PC before expansion: "
+                     f" 0x{self.current_address:04x}")
+
+        # Save current parsing state.
+        orig_tokens = self.tokens
+        orig_token_idx = self.token_idx
+        orig_current_token = self.current_token
+
+        # Setup parser to process token list.
+        self.tokens = macro_tokens
+        self.token_idx = 0
+        if self.tokens:
+            self.current_token = self.tokens[self.token_idx]
+        else:
+            self.current_token = None
+
+        try:
+            while self.current_token is not None:
+                self._dispatch_current_token_for_pass1()
+        finally:
+            # Restore original parsing state
+            self.tokens = orig_tokens
+            self.token_idx = orig_token_idx
+            self.current_token = orig_current_token
+        logger.debug(f"    Finished expanding macro '{macro_name}'."
+                     f" PC after expansion:"
+                     f" 0x{self.current_address:04x}")
 
     def parse_pass1(self):
         """Parse tokens Pass #1."""
