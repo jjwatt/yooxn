@@ -277,7 +277,7 @@ class Lexer:
                     self._advance()
                 return self._add_token(TOKENTYPE.RAW_ASCII_CHUNK)
 
-            case c if c.isalpha() or c == '_':
+            case c if c.isalpha() or c in ['_', '<', '>']:
                 # c is the first char.
                 # self.start points to it. self.cursor is 1 position after it.
 
@@ -285,7 +285,7 @@ class Lexer:
                 # identifier/opcode word.
                 while (not self._is_at_end() and
                        (self._peek().isalnum()
-                        or self._peek() in ['_', '/', '-'])):
+                        or self._peek() in ['_', '/', '-', '<', '>'])):
                     self._advance()
                 word = self.src[self.start:self.cursor]
 
