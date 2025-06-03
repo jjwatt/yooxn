@@ -686,6 +686,9 @@ class Parser:
         self.current_address += size
         self._advance()
 
+    def _handle_include_directive(self):
+        raise NotImplementedError
+
     def _dispatch_current_token_for_pass1(self):
         """Handle a single token based on its type during Pass 1."""
         if self.current_token is None:
@@ -749,6 +752,10 @@ class Parser:
                 # For raw { ... }
                 self._handle_raw_hex_data_block()
 
+            # Include directive
+            case TOKENTYPE.RUNE_TILDE:
+                self._handle_include_directive()
+
             case TOKENTYPE.RUNE_LBRACKET:
                 # For [ (ignored)
                 logger.debug(f"  Ignoring Rune '['"
@@ -776,7 +783,6 @@ class Parser:
                                   token=self.current_token)
             # Handle delimiters that don't contribute to size but need
             # to be consumed if not part of a larger structure already
-            # handled (like RUNE_RBRACE by conditional block)
             case (TOKENTYPE.LPAREN | TOKENTYPE.RPAREN):
                 logger.debug(f"  Skipping Delimiter/Ignored Token: "
                              f"'{self.current_token.word}' type: {token_type}"
