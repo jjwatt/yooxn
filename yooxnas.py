@@ -424,6 +424,17 @@ class Parser:
             return self.tokens[peek_idx]
         return None
 
+    def _is_hex_digit(self, char: str) -> bool:
+        """Check if a char is a valid hexidecimal digit."""
+        if not char:
+            return False
+        char_lower = char.lower()
+        return ('0' <= char_lower <= '9' or 'a' <= char_lower <= 'f')
+
+    def _is_purely_hex(self, word: str) -> bool:
+        return all(self._is_hex_digit(char)
+                   for char in word)
+
     def get_opcode_byte(self, op_word: str) -> int | None:
         """
         Simplified version of uxnasm.c's findopcode.
@@ -993,6 +1004,25 @@ class Parser:
             # It's a macro invocation.
             self._handle_macro_invocation(word, id_token.line)
             self._advance()
+        elif self._is_purely_hex(word):
+            hex_len = len(word)
+            if hex_len == 0:
+                raise SyntaxError("Empty Hex", token=id_token)
+            elif hex_len <= 2:
+                size = 1
+                logger.debug(f"Hex-like identifier (as raw byte)"
+                             f", word: '{word}', size: '{size}'"
+                             f", line: '{id_token.line}'")
+            elif hex_len <= 4:
+                size = 2
+                logger.debug(f"Hex-like identifier (as raw short)"
+                             f", word: '{word}', size: '{size}'"
+                             f", line: '{id_token.line}'")
+            else:
+                logger.warning(f"Long hex-like id '{word}'"
+                               f", line: '{id_token.line}'."
+                               " Treating as bare word call")
+                size = 3
         else:
             # It's a bare word, not a known opcode or a macro.
             # uxnasm.c treats this as a JSR-like call,
@@ -1001,8 +1031,8 @@ class Parser:
             logger.debug(f"  Bare Word Call"
                          f" (JSR-like to '{word}',)"
                          f" size {size} bytes (Line {id_token.line})")
-            self.current_address += size
-            self._advance()
+        self.current_address += size
+        self._advance()
 
     def _handle_macro_definition(self):
         """Handle a macro definition: %name { tokens1 ... }.
