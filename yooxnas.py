@@ -261,7 +261,6 @@ class Lexer:
             case '?': return self._add_token(TOKENTYPE.RUNE_QUESTION)
             case '#': return self._add_token(TOKENTYPE.RUNE_HASH)
             case '\\': return self._add_token(TOKENTYPE.RUNE_BACKSLASH)
-            case '/': return self._add_token(TOKENTYPE.RUNE_FORWARDSLASH)
             case '%': return self._add_token(TOKENTYPE.RUNE_PERCENT)
             case '~': return self._add_token(TOKENTYPE.RUNE_TILDE)
             case '{': return self._add_token(TOKENTYPE.RUNE_LBRACE)
@@ -277,7 +276,7 @@ class Lexer:
                     self._advance()
                 return self._add_token(TOKENTYPE.RAW_ASCII_CHUNK)
 
-            case c if c.isalpha() or c in ['_', '<', '>']:
+            case c if c.isalpha() or c in ['_', '<', '>', '/']:
                 # c is the first char.
                 # self.start points to it. self.cursor is 1 position after it.
 
