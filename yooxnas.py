@@ -1028,8 +1028,8 @@ class Parser:
                                f", line: '{id_token.line}'."
                                " Treating as bare word call")
                 size = 3
-                self.current_address += size
-                self._advance()
+            self.current_address += size
+            self._advance()
         else:
             # It's a bare word, not a known opcode or a macro.
             # uxnasm.c treats this as a JSR-like call,
