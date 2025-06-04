@@ -714,7 +714,39 @@ class Parser:
 
         self.filepath_stack.append(Path(filepath_str))
         logger.debug(f"filepath_stack: {self.filepath_stack}")
-        raise NotImplementedError
+        try:
+            with open(filepath_str, "r") as inc_file:
+                inc_source = inc_file.read()
+        except FileNotFoundError:
+            raise ParsingError(f"Include file not found:"
+                               f" '{filepath_str}'",
+                               line=include_rune_token.line,
+                               filename=self._cur_ctx_filepath())
+        logger.debug(f"Lexing included file: {filepath_str}")
+        inc_lexer = Lexer(inc_source, filename=filepath_str)
+        inc_tokens = inc_lexer.scan_all_tokens()
+        if not inc_tokens:
+            logger.debug(f"Included file '{filepath_str}' is empty or"
+                         " contains no tokens.")
+        logger.debug(f"Starting Pass 1 for included file:"
+                     f" {filepath_str} PC=0x{self.current_address:04x}")
+        # Set this parser's tokens to included file's tokens
+        self.tokens = inc_tokens
+        self.token_idx = 0
+        self.current_token = self.tokens[0] if self.tokens else None
+        # Recursively process token stream. It should finish
+        # and come back here.
+        self._process_token_stream()
+        logger.debug(f"Finished Pass 1 for included file:"
+                     f" {filepath_str}"
+                     f" PC=0x{self.current_address:04x}")
+        # Restore previous state of parser
+        self.tokens = orig_tokens
+        self.token_idx = orig_token_idx
+        self.current_token = orig_current_token
+        # Restore filepath
+        # TODO: Make this a fn
+        self.filepath_stack.pop()
 
     def _dispatch_current_token_for_pass1(self):
         """Handle a single token based on its type during Pass 1."""
