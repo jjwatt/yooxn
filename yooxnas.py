@@ -253,7 +253,7 @@ class Lexer:
             case '&': return self._add_token(TOKENTYPE.RUNE_AMPERSAND)
             case ',': return self._add_token(TOKENTYPE.RUNE_COMMA)
             case '_': return self._add_token(TOKENTYPE.RUNE_UNDERSCORE)
-            case '.': return self._add_token(TOKENTYPE.RUNE_PERIOD)
+            # case '.': return self._add_token(TOKENTYPE.RUNE_PERIOD)
             case '-': return self._add_token(TOKENTYPE.RUNE_MINUS)
             case ';': return self._add_token(TOKENTYPE.RUNE_SEMICOLON)
             case '=': return self._add_token(TOKENTYPE.RUNE_EQUAL)
@@ -276,7 +276,7 @@ class Lexer:
                     self._advance()
                 return self._add_token(TOKENTYPE.RAW_ASCII_CHUNK)
 
-            case c if c.isalpha() or c in ['_', '<', '>', '/']:
+            case c if c.isalpha() or c in ['_', '<', '>', '/', '.']:
                 # c is the first char.
                 # self.start points to it. self.cursor is 1 position after it.
 
@@ -284,7 +284,7 @@ class Lexer:
                 # identifier/opcode word.
                 while (not self._is_at_end() and
                        (self._peek().isalnum()
-                        or self._peek() in ['_', '/', '-', '<', '>'])):
+                        or self._peek() in ['_', '/', '-', '<', '>', '.'])):
                     self._advance()
                 word = self.src[self.start:self.cursor]
 
@@ -387,7 +387,7 @@ class Parser:
         "BRK", "JCI", "JMI"
     ]])
 
-    def __init__(self, tokens: list[Token], filename: str | None = None):
+    def __init__(self, tokens: list[Token], cur_filepath: str | None = None):
         """Initialize a new parser object.
 
         Args:
@@ -398,13 +398,20 @@ class Parser:
         self.current_token: Token | None = None
         if self.tokens:
             self.current_token = self.tokens[0]
-        self.filename = Path(filename)
+        cur_filepath = Path(cur_filepath)
+        self.filepath_stack = [cur_filepath]
 
         self.symbol_table = {}
         self.macros = {}
         # Start at 0. Uxn ROMs will usually set this to 0x0100
         self.current_address = 0x0000
         self.rom_bytes = bytearray()
+
+    def _cur_ctx_filepath(self):
+        if self.filepath_stack:
+            return self.filepath_stack[-1]
+        else:
+            return "unknown_file"
 
     def _advance(self):
         """Advance the token.
@@ -687,6 +694,26 @@ class Parser:
         self._advance()
 
     def _handle_include_directive(self):
+        include_rune_token = self.current_token
+        self._advance()
+        if not (self.current_token and
+                self.current_token.type == TOKENTYPE.IDENTIFIER):
+            raise SyntaxError("Expected filepath (IDENTIFIER) after '~'",
+                              token=include_rune_token)
+        filepath_token = self.current_token
+        filepath_str = filepath_token.word
+        logger.debug(f"  Include Directive: ~{filepath_str}"
+                     f" (Line {include_rune_token.line})")
+        # Consume the filepath_str
+        self._advance()
+
+        # Save the Parser's token processing state
+        orig_tokens = self.tokens
+        orig_token_idx = self.token_idx
+        orig_current_token = self.current_token
+
+        self.filepath_stack.append(Path(filepath_str))
+        logger.debug(f"filepath_stack: {self.filepath_stack}")
         raise NotImplementedError
 
     def _dispatch_current_token_for_pass1(self):
@@ -794,7 +821,7 @@ class Parser:
                 raise SyntaxError(f"Unexpected token during dispatch:"
                                   f" '{self.current_token.word}'",
                                   token=self.current_token,
-                                  filename=self.filename)
+                                  filename=self._cur_ctx_filepath())
 
     def _handle_raw_ascii_chunk(self):
         """Handle RAW_ASCII_CHUNK.
@@ -1009,6 +1036,7 @@ class Parser:
             # It's a macro invocation.
             self._handle_macro_invocation(word, id_token.line)
             self._advance()
+            return
         elif self._is_purely_hex(word):
             hex_len = len(word)
             if hex_len == 0:
@@ -1028,8 +1056,6 @@ class Parser:
                                f", line: '{id_token.line}'."
                                " Treating as bare word call")
                 size = 3
-            self.current_address += size
-            self._advance()
         else:
             # It's a bare word, not a known opcode or a macro.
             # uxnasm.c treats this as a JSR-like call,
@@ -1038,8 +1064,8 @@ class Parser:
             logger.debug(f"  Bare Word Call"
                          f" (JSR-like to '{word}',)"
                          f" size {size} bytes (Line {id_token.line})")
-            self.current_address += size
-            self._advance()
+        self.current_address += size
+        self._advance()
 
     def _handle_macro_definition(self):
         """Handle a macro definition: %name { tokens1 ... }.
@@ -1068,10 +1094,11 @@ class Parser:
             raise SyntaxError(f"Duplicate macro definition for"
                               f"'{macro_name}'.", token=percent_token)
         if macro_name in self.symbol_table:
-            # TODO(jjwatt): Start doing filename:line:column for errors.
             raise SyntaxError(f"Macro name '{macro_name}'"
                               f" (Line {macro_name_token.line})"
-                              f" collides with existing label.")
+                              f" collides with existing label.",
+                              token=percent_token,
+                              filename=self._cur_ctx_filepath())
         logger.debug(f"Defining Macro: '{macro_name}'")
         # Consume the macro name IDENTIFIER
         self._advance()
@@ -1171,22 +1198,27 @@ class Parser:
                      f" PC after expansion:"
                      f" 0x{self.current_address:04x}")
 
-    def parse_pass1(self):
-        """Parse tokens Pass #1."""
-        logger.debug("Starting parser pass 1")
-        if not self.tokens or self.tokens[0].type == TOKENTYPE.EOF:
-            logger.debug('No tokens to parse.')
-            return
-        if self.current_token is None and self.tokens:
-            self.current_token = self.tokens[0]
+    def _process_token_stream(self):
         try:
             while (self.current_token is not None
                    and self.current_token.type != TOKENTYPE.EOF):
                 self._dispatch_current_token_for_pass1()
         except ParsingError as pe:
+            pe.filename = self._cur_ctx_filepath()
             logger.error(str(pe))
             logger.debug("Parser Pass 1 aborted due to error.")
             raise
+
+    def parse_pass1(self):
+        """Parse tokens Pass #1."""
+        logger.debug("Starting parser pass 1")
+        if self.current_token is None and self.tokens:
+            self.current_token = self.tokens[0]
+        elif not self.tokens:
+            logger.debug('No tokens to parse.')
+            return
+
+        self._process_token_stream()
 
         # This part is outside the try...except, will run even if an
         # error occurred mid-way which might be okay for seeing
@@ -1225,7 +1257,7 @@ def main():
             #     token.print()
 
             if tokens and tokens[-1].type != TOKENTYPE.ILLEGAL:
-                parser = Parser(tokens, filename=args.file)
+                parser = Parser(tokens, cur_filepath=file_path)
                 parser.parse_pass1()
             else:
                 print("Lexer failed. Parsing skipped.")
