@@ -455,6 +455,201 @@ class Parser:
             return None
         return 0x01
 
+    def _process_token_stream(self):
+        try:
+            while (self.current_token is not None
+                   and self.current_token.type != TOKENTYPE.EOF):
+                self._dispatch_current_token_for_pass1()
+        except ParsingError as pe:
+            pe.filename = self._cur_ctx_filepath()
+            logger.error(str(pe))
+            logger.debug("Parser Pass 1 aborted due to error.")
+            raise
+
+    def parse_pass1(self):
+        """Parse tokens Pass #1."""
+        logger.debug("Starting parser pass 1")
+        if self.current_token is None and self.tokens:
+            self.current_token = self.tokens[0]
+        elif not self.tokens:
+            logger.debug('No tokens to parse.')
+            return
+
+        self._process_token_stream()
+
+        # This part is outside the try...except, will run even if an
+        # error occurred mid-way which might be okay for seeing
+        # partial results, or you can move it inside the try.  Or only
+        # print if no error occurred by checking a flag.
+        logger.debug("Parser Pass 1 Finished.")
+        logger.debug("Symbol Table:")
+        for label, address in self.symbol_table.items():
+            logger.debug(f"\t {label}: 0x{address:04x}")
+        logger.debug(f"Final Calculated Address"
+                     f" (after pass 1 processing):"
+                     f" 0x{self.current_address:04x}")
+
+    def parse_pass2(self):
+        """Parse tokens Pass #2."""
+        logger.debug("Starting parser pass 2.")
+        self.token_idx = 0
+        self.current_token = self.tokens[0] if self.tokens else None
+        self.current_address = 0x0000
+        self.rom_data = bytearray()
+
+        if not self.tokens or self.tokens[0].type == TOKENTYPE.EOF:
+            logger.debug("No tokens to process in Pass 2.")
+            return
+        try:
+            while (self.current_token is not None
+                   and self.current_token.type != TOKENTYPE.EOF):
+                self._dispatch_token_for_pass2()
+        except ParsingError as pe:
+            pe.filename = self._cur_ctx_filepath()
+            logger.error(str(pe))
+            return
+        logger.debug("Parser Pass 2 Complete.")
+        logger.debug(f"Final PC (Pass 2): 0x{self.current_address:04x}"
+                     f" ROM size {len(self.rom_data)} bytes.")
+
+    def _dispatch_current_token_for_pass1(self):
+        """Handle a single token based on its type during Pass 1."""
+        if self.current_token is None:
+            return
+
+        token_type = self.current_token.type
+
+        match token_type:
+            case TOKENTYPE.RUNE_PIPE:
+                self._handle_padding_rune()
+            case TOKENTYPE.RUNE_DOLLAR:
+                self._handle_padding_rune()
+            case TOKENTYPE.RUNE_AT:
+                self._handle_label_definition()
+            case TOKENTYPE.RUNE_AMPERSAND:
+                self._handle_label_definition()
+            case TOKENTYPE.RAW_ASCII_CHUNK:
+                self._handle_raw_ascii_chunk()
+            case TOKENTYPE.RUNE_HASH:
+                self._handle_hash_literal()
+            case TOKENTYPE.HEX_LITERAL:
+                self._handle_standalone_hex_data()
+            # Literal Absolute pushes an absolute address short to label.
+            case TOKENTYPE.RUNE_SEMICOLON:
+                self._handle_literal_addressing_rune_op(
+                    ';', get_opcode_byte("LIT2"), 2
+                )
+            # Conditional Jump routine.
+            case TOKENTYPE.RUNE_QUESTION:
+                self._handle_literal_addressing_rune_op(
+                    # JCI is byte 0x20
+                    '?', 0x20, 2
+                )
+            # Literal Jump routine.
+            case TOKENTYPE.RUNE_EXCLAIM:
+                self._handle_literal_addressing_rune_op(
+                    # JMI is 0x40
+                    '!', 0x40, 2
+                )
+            # Literal Relative pushes a relative distance byte to the label.
+            case TOKENTYPE.RUNE_COMMA:
+                self._handle_literal_addressing_rune_op(
+                    ',', get_opcode_byte("LIT"), 1
+                )
+            # Literal Zero-Page pushes an absolute address byte to the label.
+            case TOKENTYPE.RUNE_PERIOD:
+                self._handle_literal_addressing_rune_op(
+                    '.', get_opcode_byte("LIT"), 1
+                )
+            # Raw addressing ops. These don't have implied opcodes.
+            # Raw Relative writes a relative distance byte to the label.
+            case TOKENTYPE.RUNE_UNDERSCORE:
+                self._handle_raw_addressing_rune_op('_', 1)
+            # Raw Zero-Page writes an absolute address byte to the label.
+            case TOKENTYPE.RUNE_MINUS:
+                self._handle_raw_addressing_rune_op('-', 1)
+            # Raw Absolute writes an absolute address short to the label.
+            case TOKENTYPE.RUNE_EQUAL:
+                self._handle_raw_addressing_rune_op('=', 2)
+            case TOKENTYPE.RUNE_LBRACE:
+                # For raw { ... }
+                self._handle_raw_hex_data_block()
+
+            # Include directive
+            case TOKENTYPE.RUNE_TILDE:
+                self._handle_include_directive()
+
+            case TOKENTYPE.RUNE_LBRACKET:
+                # For [ (ignored)
+                logger.debug(f"  Ignoring Rune '['"
+                             f" (Line {self.current_token.line}")
+                self._advance()
+
+            case TOKENTYPE.RUNE_RBRACKET:
+                # ] ignored
+                logger.debug(f"  Ignoring Rune ']'"
+                             f" (Line {self.current_token.line}")
+                self._advance()
+
+            case TOKENTYPE.OPCODE:
+                self._handle_opcode_token()
+
+            case TOKENTYPE.IDENTIFIER:
+                self._handle_identifier_token()
+
+            case TOKENTYPE.RUNE_PERCENT:
+                self._handle_macro_definition()
+
+            case TOKENTYPE.RUNE_RBRACE | TOKENTYPE.RUNE_RBRACKET:
+                raise SyntaxError(f"Unexpected closing delimiter"
+                                  f" '{self.current_token.word}'",
+                                  token=self.current_token)
+            # Handle delimiters that don't contribute to size but need
+            # to be consumed if not part of a larger structure already
+            case (TOKENTYPE.LPAREN | TOKENTYPE.RPAREN):
+                logger.debug(f"  Skipping Delimiter/Ignored Token: "
+                             f"'{self.current_token.word}' type: {token_type}"
+                             f" (Line {self.current_token.line})")
+                self._advance()
+            # Default case for any other unhandled token types
+            case _:
+                # This should ideally be an error for unexpected tokens.
+                raise SyntaxError(f"Unexpected token during dispatch:"
+                                  f" '{self.current_token.word}'",
+                                  token=self.current_token,
+                                  filename=self._cur_ctx_filepath())
+
+    def _dispatch_token_for_pass2(self):
+        if self.current_token is None: return
+        token_type = self.current_token.type
+
+        # Most directives that only affect symbols or PC in Pass 1
+        # might just advance PC or be skipped in Pass 2 if their byte-generating
+        # components (like #literal or ;label) are handled separately.
+        match token_type:
+            # case TOKENTYPE.RUNE_PIPE:
+            #     self._handle_padding_rune_pass2()
+            # case TOKENTYPE.RAW_ASCII_CHUNK:
+            #     self._handle_raw_ascii_chunk_pass2()
+            # case TOKENTYPE.HEX_LITERAL:
+            #     self._handle_standalone_hex_data_pass2()
+            # case TOKENTYPE.IDENTIFIER | TOKENTYPE.OPCODE:
+            #     self._handle_identifier_token_pass2()
+            case TOKENTYPE.RUNE_AT | TOKENTYPE.RUNE_AMPERSAND:
+                logger.debug(f"Pass 2: Label Def/Ref"
+                             f"'{self.current_token.word}'"
+                             f" no bytes emitted.")
+                self._advance()
+            case TOKENTYPE.RUNE_LBRACKET | TOKENTYPE.RUNE_RBRACKET:
+                logger.debug(f"  Pass 2: Ignoring Readability Rune:"
+                             f"'{self.current_token.word}'")
+                self._advance()
+
+            case _:
+                logger.debug(f"  Pass 2: Default skipping token:"
+                             f"'{self.current_token.word}'")
+                self._advance()
+
     def _parse_anonymous_block_content(self, open_brace_line: int):
         """
         Parse tokens within an anonymous { } block until a matching '}'.
@@ -747,113 +942,6 @@ class Parser:
         # Restore filepath
         # TODO: Make this a fn
         self.filepath_stack.pop()
-
-    def _dispatch_current_token_for_pass1(self):
-        """Handle a single token based on its type during Pass 1."""
-        if self.current_token is None:
-            return
-
-        token_type = self.current_token.type
-
-        match token_type:
-            case TOKENTYPE.RUNE_PIPE:
-                self._handle_padding_rune()
-            case TOKENTYPE.RUNE_DOLLAR:
-                self._handle_padding_rune()
-            case TOKENTYPE.RUNE_AT:
-                self._handle_label_definition()
-            case TOKENTYPE.RUNE_AMPERSAND:
-                self._handle_label_definition()
-            case TOKENTYPE.RAW_ASCII_CHUNK:
-                self._handle_raw_ascii_chunk()
-            case TOKENTYPE.RUNE_HASH:
-                self._handle_hash_literal()
-            case TOKENTYPE.HEX_LITERAL:
-                self._handle_standalone_hex_data()
-            # Literal Absolute pushes an absolute address short to label.
-            case TOKENTYPE.RUNE_SEMICOLON:
-                self._handle_literal_addressing_rune_op(
-                    ';', get_opcode_byte("LIT2"), 2
-                )
-            # Conditional Jump routine.
-            case TOKENTYPE.RUNE_QUESTION:
-                self._handle_literal_addressing_rune_op(
-                    # JCI is byte 0x20
-                    '?', 0x20, 2
-                )
-            # Literal Jump routine.
-            case TOKENTYPE.RUNE_EXCLAIM:
-                self._handle_literal_addressing_rune_op(
-                    # JMI is 0x40
-                    '!', 0x40, 2
-                )
-            # Literal Relative pushes a relative distance byte to the label.
-            case TOKENTYPE.RUNE_COMMA:
-                self._handle_literal_addressing_rune_op(
-                    ',', get_opcode_byte("LIT"), 1
-                )
-            # Literal Zero-Page pushes an absolute address byte to the label.
-            case TOKENTYPE.RUNE_PERIOD:
-                self._handle_literal_addressing_rune_op(
-                    '.', get_opcode_byte("LIT"), 1
-                )
-            # Raw addressing ops. These don't have implied opcodes.
-            # Raw Relative writes a relative distance byte to the label.
-            case TOKENTYPE.RUNE_UNDERSCORE:
-                self._handle_raw_addressing_rune_op('_', 1)
-            # Raw Zero-Page writes an absolute address byte to the label.
-            case TOKENTYPE.RUNE_MINUS:
-                self._handle_raw_addressing_rune_op('-', 1)
-            # Raw Absolute writes an absolute address short to the label.
-            case TOKENTYPE.RUNE_EQUAL:
-                self._handle_raw_addressing_rune_op('=', 2)
-            case TOKENTYPE.RUNE_LBRACE:
-                # For raw { ... }
-                self._handle_raw_hex_data_block()
-
-            # Include directive
-            case TOKENTYPE.RUNE_TILDE:
-                self._handle_include_directive()
-
-            case TOKENTYPE.RUNE_LBRACKET:
-                # For [ (ignored)
-                logger.debug(f"  Ignoring Rune '['"
-                             f" (Line {self.current_token.line}")
-                self._advance()
-
-            case TOKENTYPE.RUNE_RBRACKET:
-                # ] ignored
-                logger.debug(f"  Ignoring Rune ']'"
-                             f" (Line {self.current_token.line}")
-                self._advance()
-
-            case TOKENTYPE.OPCODE:
-                self._handle_opcode_token()
-
-            case TOKENTYPE.IDENTIFIER:
-                self._handle_identifier_token()
-
-            case TOKENTYPE.RUNE_PERCENT:
-                self._handle_macro_definition()
-
-            case TOKENTYPE.RUNE_RBRACE | TOKENTYPE.RUNE_RBRACKET:
-                raise SyntaxError(f"Unexpected closing delimiter"
-                                  f" '{self.current_token.word}'",
-                                  token=self.current_token)
-            # Handle delimiters that don't contribute to size but need
-            # to be consumed if not part of a larger structure already
-            case (TOKENTYPE.LPAREN | TOKENTYPE.RPAREN):
-                logger.debug(f"  Skipping Delimiter/Ignored Token: "
-                             f"'{self.current_token.word}' type: {token_type}"
-                             f" (Line {self.current_token.line})")
-                self._advance()
-            # Default case for any other unhandled token types
-            case _:
-                # This should ideally be an error for unexpected tokens.
-                raise SyntaxError(f"Unexpected token during dispatch:"
-                                  f" '{self.current_token.word}'",
-                                  token=self.current_token,
-                                  filename=self._cur_ctx_filepath())
 
     def _handle_raw_ascii_chunk(self):
         """Handle RAW_ASCII_CHUNK.
@@ -1230,40 +1318,6 @@ class Parser:
                      f" PC after expansion:"
                      f" 0x{self.current_address:04x}")
 
-    def _process_token_stream(self):
-        try:
-            while (self.current_token is not None
-                   and self.current_token.type != TOKENTYPE.EOF):
-                self._dispatch_current_token_for_pass1()
-        except ParsingError as pe:
-            pe.filename = self._cur_ctx_filepath()
-            logger.error(str(pe))
-            logger.debug("Parser Pass 1 aborted due to error.")
-            raise
-
-    def parse_pass1(self):
-        """Parse tokens Pass #1."""
-        logger.debug("Starting parser pass 1")
-        if self.current_token is None and self.tokens:
-            self.current_token = self.tokens[0]
-        elif not self.tokens:
-            logger.debug('No tokens to parse.')
-            return
-
-        self._process_token_stream()
-
-        # This part is outside the try...except, will run even if an
-        # error occurred mid-way which might be okay for seeing
-        # partial results, or you can move it inside the try.  Or only
-        # print if no error occurred by checking a flag.
-        logger.debug("Parser Pass 1 Finished.")
-        logger.debug("Symbol Table:")
-        for label, address in self.symbol_table.items():
-            logger.debug(f"\t {label}: 0x{address:04x}")
-        logger.debug(f"Final Calculated Address"
-                     f" (after pass 1 processing):"
-                     f" 0x{self.current_address:04x}")
-
 
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
@@ -1291,6 +1345,12 @@ def main():
             if tokens and tokens[-1].type != TOKENTYPE.ILLEGAL:
                 parser = Parser(tokens, cur_filepath=file_path)
                 parser.parse_pass1()
+                try:
+                    parser.parse_pass2()
+                except ParsingError:
+                    logger.debug("Parsing error in Pass 2")
+                    raise
+                parser.write_rom("output.rom")
             else:
                 print("Lexer failed. Parsing skipped.")
 
