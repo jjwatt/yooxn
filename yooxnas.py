@@ -652,7 +652,9 @@ class Parser:
                                   token=self.current_token,
                                   filename=self._cur_ctx_filepath())
 
-    def _parse_anonymous_block_content(self, open_brace_line: int):
+    def _parse_anonymous_block_content(self,
+                                       open_brace_token: Token,
+                                       anonymous_label_end_name: str):
         """
         Parse tokens within an anonymous { } block until a matching '}'.
 
@@ -661,7 +663,8 @@ class Parser:
         content. Consumes the closing '}'.
         """
         logger.debug(f"  Entering anonymous block started on line"
-                     f" {open_brace_line}")
+                     f" {open_brace_token.line}")
+        logger.debug(f"  Will define '{anonymous_label_end_name}'")
         depth = 1
         while self.current_token is not None:
             # Nested block
@@ -684,6 +687,8 @@ class Parser:
                 logger.debug(f"    Found '}}', depth now {depth}"
                              f" (Line {self.current_token.line})")
                 if depth == 0:
+                    end_label_address = self.current_address
+                    self.symbol_table[anonymous_label_end_name] = end_label_address
                     # Consume the final '}'
                     self._advance()
                     logger.debug(f"    Exiting anonymous block."
@@ -702,7 +707,8 @@ class Parser:
                 else:
                     token = self.tokens[-1]
                 raise SyntaxError(f"Unclosed anonymous block {{"
-                                  f" starting on line {open_brace_line}."
+                                  f" starting on line "
+                                  f"{open_brace_token.line}."
                                   " Reached EOF.",
                                   token=token)
             else:
@@ -771,6 +777,7 @@ class Parser:
         placeholder_size: 1 for byte, 2 for short (0xff or 0xffff)
         """
         rune_token = self.current_token
+        op_start_address = self.current_address
         # Consume the main addressing rune (';', '?', '!', ',', '.')
         self._advance()
 
@@ -778,21 +785,50 @@ class Parser:
         # JMI + placeholder)
         prefix_operation_size = 1 + placeholder_size
 
+        target_label_name = ""
+        ref_type = f"LITERAL_{rune_char_expected}_{placeholder_size*8}"
+        match rune_char_expected:
+            case '?':
+                ref_type = "JCI_REL16_VIA_OPCODE"
+            case '!':
+                ref_type = "JMI_REL16_VIA_OPCODE"
+            case _:
+                raise ParsingError(f"Unexpected rune char"
+                                   f" {ref_type}",
+                                   token=rune_token)
         if (self.current_token
                 and self.current_token.type == TOKENTYPE.RUNE_LBRACE):
             # Operand is an anonymous block { ... }
             lbrace_token = self.current_token
+            target_label_name = self._generate_anonymous_label_name(
+                lbrace_token.line)
+            logger.debug(f"  IR Target: Literal Addressing Rune Op:"
+                         f"{rune_token.word}{{...}} detected "
+                         " (Line {rune_token.line})")
+
             logger.debug(f"  Addressing Rune Op: {rune_token.word}{{...}}"
                          f" detected (Line {rune_token.line})")
             logger.debug(f"    Prefix operation {rune_token.word}{{"
                          f" contributes {prefix_operation_size} bytes."
                          f" PC from 0x{self.current_address:04x}")
+            self.ir_stream.append(
+                IRLabelPlaceholder(
+                    address=op_start_address,
+                    size=prefix_operation_size,
+                    label_name=target_label_name,
+                    ref_type=ref_type,
+                    implied_opcode=implied_opcode_byte,
+                    source_line=rune_token.line)
+            )
             self.current_address += prefix_operation_size
             logger.debug(f"    ...to 0x{self.current_address:04x}."
                          " Now parsing block content.")
             # Consume '{'
             self._advance()
-            self._parse_anonymous_block_content(lbrace_token.line)
+            self._parse_anonymous_block_content(
+                lbrace_token,
+                anonymous_label_end_name=target_label_name
+            )
             # This will parse until '}' and advance PC for content The
             # address "provided" by { is self.current_address (which
             # is now after the '}'). This address would be used in
@@ -815,6 +851,15 @@ class Parser:
             base_label_name = label_identifier_token.word
             displayed_label = f"{label_prefix}{base_label_name}"
 
+            self.ir_stream.append(
+                IRLabelPlaceholder(
+                    address=op_start_address,
+                    size=prefix_operation_size,
+                    label_name=target_label_name,
+                    ref_type=ref_type,
+                    implied_opcode=implied_opcode_byte,
+                    source_line=rune_token.line)
+            )
             logger.debug(f"  Addressing Rune Op:"
                          f" {rune_token.word}{displayed_label}, "
                          f"implies [Opcode 0x{implied_opcode_byte:02x}"
@@ -832,35 +877,65 @@ class Parser:
         return f"__ANON_END_{line}_{Parser._anon_label_counter}"
 
     def _handle_raw_addressing_rune_op(self,
-                                       rune_char_for_log: str,
+                                       rune_char: str,
                                        placeholder_size: int):
         """Handle raw addressing runes like '_', '-', and '='.
 
         These directly reserve placeholder_size bytes for an address/offset.
         """
         rune_token = self.current_token
+        op_start_address = self.current_address
+
         # Consume the raw addressing rune ('_', '-', '=').
         self._advance()
 
         # Size for the operation prefix (just the placeholder for raw modes)
         prefix_operation_size = placeholder_size
 
+        target_label_name = ""
+        ref_type = ""
+
+        match rune_char:
+            case '_':
+                ref_type = "RAW_REL8"
+            case '-':
+                ref_type = "RAW_ZP8"
+            case '=':
+                ref_type = "RAW_ABS16"
+            case _:
+                raise ParsingError("Unknown raw rune:"
+                                   f"'{rune_char}'"
+                                   "in _handle_raw_addressing_rune_op",
+                                   token=rune_token)
         if (self.current_token
                 and self.current_token.type == TOKENTYPE.RUNE_LBRACE):
             # Operand is an anonymous block { ... }
             lbrace_token = self.current_token
+            target_label_name = self._generate_anonymous_label_name(
+                lbrace_token.line)
             logger.debug(f"  Raw Addressing Rune Op: {rune_token.word}{{...}}"
                          f" detected (Line {rune_token.line})")
             logger.debug(f"    Prefix operation {rune_token.word}{{"
                          f"contributes {prefix_operation_size} bytes"
                          f" for placeholder."
                          f" PC from 0x{self.current_address:04x}")
+            self.ir_stream.append(
+                IRLabelPlaceholder(
+                    address=op_start_address,
+                    size=placeholder_size,
+                    label_name=target_label_name,
+                    ref_type=ref_type,
+                    implied_opcode=None,
+                    source_line=rune_token.line)
+            )
             self.current_address += prefix_operation_size
             logger.debug(f"    ...to 0x{self.current_address:04x}."
                          " Now parsing block content.")
             # Consume '{'
             self._advance()
-            self._parse_anonymous_block_content(lbrace_token.line)
+            self._parse_anonymous_block_content(
+                lbrace_token,
+                anonymous_label_end_name=target_label_name)
         else:
             # Operand is a standard label (&label or label)
             label_prefix = ""
@@ -876,7 +951,15 @@ class Parser:
             label_identifier_token = self.current_token
             base_label_name = label_identifier_token.word
             displayed_label = f"{label_prefix}{base_label_name}"
-
+            self.ir_stream.append(
+                IRLabelPlaceholder(
+                    address=op_start_address,
+                    size=placeholder_size,
+                    label_name=displayed_label,
+                    ref_type=ref_type,
+                    implied_opcode=None,
+                    source_line=rune_token.line)
+            )
             logger.debug(f"  Raw Addressing Rune Op:"
                          f" {rune_token.word}{displayed_label}, "
                          f"reserves {placeholder_size}-byte placeholder,"
