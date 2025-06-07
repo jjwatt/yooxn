@@ -378,6 +378,7 @@ class IRLabelPlaceholder(IRNode):
     label_name: str
     ref_type: str
     """LIT2_ABS, LIT2_REL."""
+    placeholder_size: int
     implied_opcode: Optional[int] = None
     """Byte for LIT2, JMI, LIT or None for raw."""
 
@@ -452,6 +453,7 @@ class Parser:
         # Start at 0. Uxn ROMs will usually set this to 0x0100
         self.current_address = 0x0000
         self.rom_bytes = bytearray()
+        self.current_scope = ""
 
     def _cur_ctx_filepath(self):
         if self.filepath_stack:
@@ -501,6 +503,10 @@ class Parser:
             return None
         return 0x01
 
+    def write_rom(self, output_filename=None):
+        """Write out the rom file."""
+        raise NotImplementedError
+
     def _process_token_stream(self):
         try:
             while (self.current_token is not None
@@ -536,14 +542,71 @@ class Parser:
                      f" 0x{self.current_address:04x}")
         return self.ir_stream, self.symbol_table
 
+    def _pp2(self, obj):
+        logger.debug(f" PASS2: Emitted {obj}"
+                     f" at 0x{obj.address:04x}")
+
     def parse_pass2(self, ir_stream: list[IRNode], symbol_table: dict):
         """Parse tokens Pass #2."""
         logger.debug("Starting parser pass 2.")
         self.current_address = 0x0000
         self.rom_data = bytearray()
 
-        logger.debug(f"TODO: Parse IR stream: {ir_stream}")
-        raise NotImplementedError
+        logger.debug("TODO: Parse IR stream:")
+        for ir in ir_stream:
+            logger.debug(f"  {ir}")
+            if ir.address > len(self.rom_data):
+                padding_needed = ir.address - len(self.rom_data)
+                self.rom_data.extend([0x00] * padding_needed)
+            match ir:
+                case inst if isinstance(inst, IRPadding):
+                    logger.debug(f" PASS2: Padding to"
+                                 f"0x{inst.target_address:04x}")
+                case inst if isinstance(inst, IRRawBytes):
+                    self.rom_data.extend(inst.byte_values)
+                    self._pp2(inst)
+                case inst if isinstance(inst, IROpcode):
+                    self.rom_data.append(inst.byte_value)
+                    self._pp2(inst)
+                case inst if isinstance(inst, IRLabelPlaceholder):
+                    if inst.implied_opcode is not None:
+                        self.rom_data.append(inst.implied_opcode)
+                        self._pp2(inst)
+                    target_addr = symbol_table.get(inst.label_name)
+                    if target_addr is None:
+                        e = ParsingError(f"Undefined label '{inst.label_name}'"
+                                         " referenced",
+                                         line=inst.source_line)
+                        raise e
+                    if (inst.ref_type.endswith("_ABS16") or
+                            inst.placeholder_size == 2):
+                        # High byte
+                        self.rom_data.append((target_addr >> 8) & 0xFF)
+                        # Low byte
+                        self.rom_data.append(target_addr & 0xFF)
+                    elif (inst.ref_type.endswith("_REL8") or
+                          inst.placeholder_size == 1):
+                        if inst.ref_type.startswith("LIT_ZP"):
+                            # .label
+                            self.rom_data.append(target_addr & 0xFF)
+                        elif inst.ref_type.startswith("LIT_REL"):
+                            # ,label
+                            # TODO: Fix later
+                            self.rom_data.append(target_addr & 0xFF)
+                        else:
+                            # Raw placeholders
+                            if inst.placeholder_size == 1:
+                                self.rom_data.append(target_addr & 0xFF)
+                            else:
+                                # 2 bytes
+                                self.rom_data.append((target_addr >> 8) & 0xFF)
+                                self.rom_data.append(target_addr & 0xFF)
+                    logger.debug(f"PASS2: Resolved {inst.label_name}"
+                                 f"for {inst.ref_type}"
+                                 f" at 0x{inst.address:04x}")
+                case _:
+                    raise NotImplementedError
+        self.current_address = len(self.rom_data)
         logger.debug("Parser Pass 2 Complete.")
         logger.debug(f"Final PC (Pass 2): 0x{self.current_address:04x}"
                      f" ROM size {len(self.rom_data)} bytes.")
@@ -795,6 +858,8 @@ class Parser:
                 ref_type = "LITERAL_ABS16_VIA_LIT2"
             case ',':
                 ref_type = "LITERAL_REL8_VIA_LIT"
+            case '.':
+                ref_type = "LITERAL_ZP8_VIA_LIT"
             case '?':
                 ref_type = "JCI_REL16_VIA_OPCODE"
             case '!':
@@ -824,6 +889,7 @@ class Parser:
                     size=prefix_operation_size,
                     label_name=target_label_name,
                     ref_type=ref_type,
+                    placeholder_size=placeholder_size,
                     implied_opcode=implied_opcode_byte,
                     source_line=rune_token.line,
                     source_filepath=self._cur_ctx_filepath())
@@ -843,10 +909,12 @@ class Parser:
             # Pass 2 to fill the placeholder.
         else:
             # Operand is a standard label (&label or label)
+            is_sub_label_ref = False
             label_prefix = ""
             if (self.current_token and
                     self.current_token.type == TOKENTYPE.RUNE_AMPERSAND):
                 label_prefix = "&"
+                is_sub_label_ref = True
                 self._advance()
 
             if not (self.current_token
@@ -857,7 +925,16 @@ class Parser:
 
             label_identifier_token = self.current_token
             base_label_name = label_identifier_token.word
-            displayed_label = f"{label_prefix}{base_label_name}"
+            target_label_name = ""
+            if is_sub_label_ref:
+                if not self.current_scope:
+                    raise SyntaxError("Sub-label reference "
+                                      f"'&{base_label_name}'"
+                                      "used outside of a parent '@' scope.",
+                                      token=label_identifier_token)
+                target_label_name = f"{self.current_scope}/{base_label_name}"
+            else:
+                target_label_name = base_label_name
 
             self.ir_stream.append(
                 IRLabelPlaceholder(
@@ -865,10 +942,14 @@ class Parser:
                     size=prefix_operation_size,
                     label_name=target_label_name,
                     ref_type=ref_type,
+                    placeholder_size=placeholder_size,
                     implied_opcode=implied_opcode_byte,
                     source_line=rune_token.line,
                     source_filepath=self._cur_ctx_filepath())
             )
+            displayed_label = base_label_name
+            if is_sub_label_ref:
+                displayed_label = f"{label_prefix}{base_label_name}"
             logger.debug(f"  Addressing Rune Op:"
                          f" {rune_token.word}{displayed_label}, "
                          f"implies [Opcode 0x{implied_opcode_byte:02x}"
@@ -1176,6 +1257,8 @@ class Parser:
                               token=directive_token)
         parent_label_token = self.current_token
         parent_label_name = parent_label_token.word
+        self.current_scope = parent_label_name
+        logger.debug(f"  Scope set to '{self.current_scope}'")
         if parent_label_name in self.symbol_table:
             # TODO: write a custom warning function with line and label
             logger.warning("Duplicate label: %s, Line %s",
