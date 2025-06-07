@@ -340,6 +340,8 @@ class IRNode:
     """Address where this node's output starts."""
     size: int
     """Size in bytes this node will occupy in the ROM."""
+    source_line: int
+    source_filepath: str
 
 
 @dataclass
@@ -358,6 +360,7 @@ class IRRawBytes(IRNode):
     """For ASCII, standalone hex, {data}."""
 
     byte_values: list[int]
+
 
 
 @dataclass
@@ -788,6 +791,10 @@ class Parser:
         target_label_name = ""
         ref_type = f"LITERAL_{rune_char_expected}_{placeholder_size*8}"
         match rune_char_expected:
+            case ';':
+                ref_type = "LITERAL_ABS16_VIA_LIT2"
+            case ',':
+                ref_type = "LITERAL_REL8_VIA_LIT"
             case '?':
                 ref_type = "JCI_REL16_VIA_OPCODE"
             case '!':
@@ -818,7 +825,8 @@ class Parser:
                     label_name=target_label_name,
                     ref_type=ref_type,
                     implied_opcode=implied_opcode_byte,
-                    source_line=rune_token.line)
+                    source_line=rune_token.line,
+                    source_filepath=self._cur_ctx_filepath())
             )
             self.current_address += prefix_operation_size
             logger.debug(f"    ...to 0x{self.current_address:04x}."
@@ -858,7 +866,8 @@ class Parser:
                     label_name=target_label_name,
                     ref_type=ref_type,
                     implied_opcode=implied_opcode_byte,
-                    source_line=rune_token.line)
+                    source_line=rune_token.line,
+                    source_filepath=self._cur_ctx_filepath())
             )
             logger.debug(f"  Addressing Rune Op:"
                          f" {rune_token.word}{displayed_label}, "
@@ -1046,7 +1055,9 @@ class Parser:
         self.ir_stream.append(
             IRRawBytes(address=self.current_address,
                        size=size,
-                       byte_values=byte_values)
+                       byte_values=byte_values,
+                       source_line=token.line,
+                       source_filepath=self._cur_ctx_filepath())
         )
         logger.debug(f"Raw ASCII Chunk: \"{content}\", "
                      f"size: {size} bytes"
