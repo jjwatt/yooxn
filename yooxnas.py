@@ -6,7 +6,7 @@ import logging
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
-
+from typing import Optional
 
 logging.basicConfig(level=logging.DEBUG,
                     format="%(levelname)s - %(message)s")
@@ -375,7 +375,7 @@ class IRLabelPlaceholder(IRNode):
     label_name: str
     ref_type: str
     """LIT2_ABS, LIT2_REL."""
-    implied_opcode: int | None = None
+    implied_opcode: Optional[int] = None
     """Byte for LIT2, JMI, LIT or None for raw."""
 
 
@@ -428,14 +428,6 @@ class Parser:
 
     Uses Tokens from the Lexer.
     """
-
-    OPS = set([name.upper() for name in [
-        "LIT", "INC", "POP", "NIP", "SWP", "ROT", "DUP", "OVR",
-        "EQU", "NEQ", "GTH", "LTH", "JMP", "JCN", "JSR", "STH",
-        "LDZ", "STZ", "LDR", "STR", "LDA", "STA", "DEI", "DEO",
-        "ADD", "SUB", "MUL", "DIV", "AND", "ORA", "EOR", "SFT",
-        "BRK", "JCI", "JMI"
-    ]])
 
     def __init__(self, tokens: list[Token], cur_filepath: str | None = None):
         """Initialize a new parser object.
@@ -832,6 +824,12 @@ class Parser:
             self.current_address += prefix_operation_size
             # Consume label IDENTIFIER
             self._advance()
+
+    _anon_label_counter = 0
+
+    def _generate_anonymous_label_name(self, line: int) -> str:
+        Parser._anon_label_counter += 1
+        return f"__ANON_END_{line}_{Parser._anon_label_counter}"
 
     def _handle_raw_addressing_rune_op(self,
                                        rune_char_for_log: str,
