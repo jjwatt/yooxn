@@ -546,15 +546,23 @@ class Parser:
         logger.debug(f" PASS2: Emitted {obj}"
                      f" at 0x{obj.address:04x}")
 
+    def _handle_ir_label_placeholder(self,
+                                     ir_node: IRLabelPlaceholder,
+                                     symbol_table: dict):
+        """Pass 2 handler for IRLabelPlaceholder nodes.
+
+        Resolves the label, calculates the final value (absolute, relative, etc),
+        and writes the corresponding opcode and/or placeholder bytes to ROM data.
+        """
+
     def parse_pass2(self, ir_stream: list[IRNode], symbol_table: dict):
         """Parse tokens Pass #2."""
         logger.debug("Starting parser pass 2.")
         self.current_address = 0x0000
         self.rom_data = bytearray()
 
-        logger.debug("TODO: Parse IR stream:")
         for ir in ir_stream:
-            logger.debug(f"  {ir}")
+            # logger.debug(f"  {ir}")
             if ir.address > len(self.rom_data):
                 padding_needed = ir.address - len(self.rom_data)
                 self.rom_data.extend([0x00] * padding_needed)
@@ -602,7 +610,7 @@ class Parser:
                                 self.rom_data.append((target_addr >> 8) & 0xFF)
                                 self.rom_data.append(target_addr & 0xFF)
                     logger.debug(f"PASS2: Resolved {inst.label_name}"
-                                 f"for {inst.ref_type}"
+                                 f" for {inst.ref_type}"
                                  f" at 0x{inst.address:04x}")
                 case _:
                     raise NotImplementedError
