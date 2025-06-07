@@ -255,7 +255,7 @@ class Lexer:
             case '&': return self._add_token(TOKENTYPE.RUNE_AMPERSAND)
             case ',': return self._add_token(TOKENTYPE.RUNE_COMMA)
             case '_': return self._add_token(TOKENTYPE.RUNE_UNDERSCORE)
-            # case '.': return self._add_token(TOKENTYPE.RUNE_PERIOD)
+            case '.': return self._add_token(TOKENTYPE.RUNE_PERIOD)
             case '-': return self._add_token(TOKENTYPE.RUNE_MINUS)
             case ';': return self._add_token(TOKENTYPE.RUNE_SEMICOLON)
             case '=': return self._add_token(TOKENTYPE.RUNE_EQUAL)
@@ -551,9 +551,64 @@ class Parser:
                                      symbol_table: dict):
         """Pass 2 handler for IRLabelPlaceholder nodes.
 
-        Resolves the label, calculates the final value (absolute, relative, etc),
-        and writes the corresponding opcode and/or placeholder bytes to ROM data.
+        Resolves the label, calculates the final value (absolute,
+        relative, etc), and writes the corresponding opcode and/or
+        placeholder bytes to ROM data.
         """
+        # -- Step 1: Emit the implied opcode byte, if it has one --
+        # This implies a literal addressing rune like ';',
+        # ',', '.', '!' and '?'
+        if ir_node.implied_opcode is not None:
+            self.rom_data.append(ir_node.implied_opcode)
+
+        # -- Step 2: Resolve the label name to its absolute address --
+        target_addr = symbol_table.get(ir_node.label_name)
+        if target_addr is None:
+            raise ParsingError(f"Undefined label '{ir_node.label_name}'"
+                               " referenced.", line=ir_node.source_line,
+                               filename=ir_node.source_filepath)
+
+        # -- Step 3: Calculate the final value to be written --
+        value_to_write = 0
+        # Check if it's any kind of relative ref.
+        if "REL" in ir_node.ref_type:
+            # Relative offsets calculated from the address of the next inst
+            inst_end_addr = ir_node.address + ir_node.size
+            value_to_write = target_addr - inst_end_addr
+        else:
+            # Absolute or Zero-Page addr used directly
+            value_to_write = target_addr
+
+        # -- Step 4: Write calculated value into ROM data --
+        if ir_node.placeholder_size == 1:
+            # For relative 8-bit jumps,
+            # check if offset in range.
+            if "REL" in ir_node.ref_type and not (-128 <= value_to_write <= 127):
+                raise ParsingError(f"Relative jump to '{ir_node.label_name}'"
+                                   f"is too far: ({value_to_write} bytes)."
+                                   " Must be between -128 and 127.",
+                                   line=ir_node.source_line,
+                                   filename=ir_node.source_filepath)
+            # For zero-page, check if address is in range.
+            if "ZP" in ir_node.ref_type and not (0 <= value_to_write <= 0xFF):
+                # TODO: Write a convenience function for PEs
+                raise ParsingError(f"Zero-page address for '{ir_node.label_name}'"
+                                   f"(0x{value_to_write:02x})"
+                                   " is outside the zero-page (0x00-0xff).",
+                                   line=ir_node.source_line,
+                                   filename=ir_node.source_filepath)
+            # Write as a single byte
+            self.rom_data.append(value_to_write & 0xFF)
+        elif ir_node.placeholder_size == 2:
+            # Write as 16-bit short (high byte, low byte)
+            self.rom_data.append((value_to_write >> 8) & 0xFF)
+            self.rom_data.append(value_to_write & 0xFF)
+
+        logger.debug(f" PASS2: Resolved {ir_node.label_name}"
+                     f"-> 0x{target_addr:04x},"
+                     f" wrote value 0x{value_to_write & 0xFFFF:04x} "
+                     f" at 0x{ir_node.address:04x}"
+                     f" (ref_type: {ir_node.ref_type})")
 
     def parse_pass2(self, ir_stream: list[IRNode], symbol_table: dict):
         """Parse tokens Pass #2."""
@@ -577,41 +632,7 @@ class Parser:
                     self.rom_data.append(inst.byte_value)
                     self._pp2(inst)
                 case inst if isinstance(inst, IRLabelPlaceholder):
-                    if inst.implied_opcode is not None:
-                        self.rom_data.append(inst.implied_opcode)
-                        self._pp2(inst)
-                    target_addr = symbol_table.get(inst.label_name)
-                    if target_addr is None:
-                        e = ParsingError(f"Undefined label '{inst.label_name}'"
-                                         " referenced",
-                                         line=inst.source_line)
-                        raise e
-                    if (inst.ref_type.endswith("_ABS16") or
-                            inst.placeholder_size == 2):
-                        # High byte
-                        self.rom_data.append((target_addr >> 8) & 0xFF)
-                        # Low byte
-                        self.rom_data.append(target_addr & 0xFF)
-                    elif (inst.ref_type.endswith("_REL8") or
-                          inst.placeholder_size == 1):
-                        if inst.ref_type.startswith("LIT_ZP"):
-                            # .label
-                            self.rom_data.append(target_addr & 0xFF)
-                        elif inst.ref_type.startswith("LIT_REL"):
-                            # ,label
-                            # TODO: Fix later
-                            self.rom_data.append(target_addr & 0xFF)
-                        else:
-                            # Raw placeholders
-                            if inst.placeholder_size == 1:
-                                self.rom_data.append(target_addr & 0xFF)
-                            else:
-                                # 2 bytes
-                                self.rom_data.append((target_addr >> 8) & 0xFF)
-                                self.rom_data.append(target_addr & 0xFF)
-                    logger.debug(f"PASS2: Resolved {inst.label_name}"
-                                 f" for {inst.ref_type}"
-                                 f" at 0x{inst.address:04x}")
+                    self._handle_ir_label_placeholder(ir, symbol_table)
                 case _:
                     raise NotImplementedError
         self.current_address = len(self.rom_data)
@@ -632,8 +653,6 @@ class Parser:
             case TOKENTYPE.RUNE_DOLLAR:
                 self._handle_padding_rune()
             case TOKENTYPE.RUNE_AT:
-                self._handle_label_definition()
-            case TOKENTYPE.RUNE_AMPERSAND:
                 self._handle_label_definition()
             case TOKENTYPE.RAW_ASCII_CHUNK:
                 self._handle_raw_ascii_chunk()
@@ -707,7 +726,7 @@ class Parser:
             case TOKENTYPE.RUNE_PERCENT:
                 self._handle_macro_definition()
 
-            case TOKENTYPE.RUNE_RBRACE | TOKENTYPE.RUNE_RBRACKET:
+            case TOKENTYPE.RUNE_RBRACE:
                 raise SyntaxError(f"Unexpected closing delimiter"
                                   f" '{self.current_token.word}'",
                                   token=self.current_token)
@@ -720,6 +739,7 @@ class Parser:
                 self._advance()
             # Default case for any other unhandled token types
             case _:
+                self._advance()
                 # This should ideally be an error for unexpected tokens.
                 raise SyntaxError(f"Unexpected token during dispatch:"
                                   f" '{self.current_token.word}'",
@@ -1186,7 +1206,7 @@ class Parser:
             size = 2
             logger.debug(f"LIT #{val}, size {size} (Line {token.line})")
         elif val_len <= 4:
-            size = 4
+            size = 3
             logger.debug(f"LIT2 #{val}, size {size} (Line {token.line})")
         else:
             raise SyntaxError(f"Hex literal too long after #: {val}",
