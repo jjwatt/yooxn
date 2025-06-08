@@ -610,6 +610,36 @@ class Parser:
                      f" at 0x{ir_node.address:04x}"
                      f" (ref_type: {ir_node.ref_type})")
 
+    def _warn_rewind(self, ir, final_rom_len):
+        logger.warning(f"  PASS2: Padding node resulted in address"
+                       f" 0x{final_rom_len:04x}, "
+                       f"which differs from directive target"
+                       f" 0x{ir.target_address:04x} (likely due to rewind).")
+
+    def _handle_ir_padding(self, ir_node: IRNode):
+        """Handle padding for Pass 2."""
+        current_rom_len = len(self.rom_data)
+        expected_address = ir_node.address
+
+        # Pad if there's a gap between the current end of the ROM and
+        # where this node should start.
+        if expected_address > current_rom_len:
+            padding_needed = expected_address - current_rom_len
+            logger.debug(f"  PASS2: Padding with {padding_needed} zero bytes"
+                         f" to reach 0x{expected_address:04x}")
+            self.rom_data.extend([0x00] * padding_needed)
+
+        # Sanity check to ensure the padding worked or to catch rewind errors.
+        if expected_address != len(self.rom_data):
+            raise ParsingError(f"Pass 2 PC desync. Expected address"
+                               f" 0x{len(self.rom_data):04x}, "
+                               f"but IR node is at 0x{expected_address:04x}."
+                               f" This can be caused by a "
+                               f"rewind padding directive "
+                               " ('|' to a lower address).",
+                               line=ir_node.source_line,
+                               filename=ir_node.source_filepath)
+
     def parse_pass2(self, ir_stream: list[IRNode], symbol_table: dict):
         """Parse tokens Pass #2."""
         logger.debug("Starting parser pass 2.")
@@ -617,14 +647,25 @@ class Parser:
         self.rom_data = bytearray()
 
         for ir in ir_stream:
-            # logger.debug(f"  {ir}")
-            if ir.address > len(self.rom_data):
-                padding_needed = ir.address - len(self.rom_data)
+            current_rom_len = len(self.rom_data)
+            expected_address = ir.address
+            if expected_address > current_rom_len:
+                padding_needed = expected_address - current_rom_len
+                logger.debug(f" PASS2: Padding with {padding_needed} 0 bytes"
+                             f" to reach 0x{expected_address:04x}")
                 self.rom_data.extend([0x00] * padding_needed)
+            # This check handles rewinds or logic errors
+            if ir.address != len(self.rom_data):
+                raise ParsingError(f"Pass 2 PC desync."
+                                   f" Expected address "
+                                   f" 0x{len(self.rom_data):04x}, "
+                                   f"but IR node is at"
+                                   f" 0x{ir.address:04x}.",
+                                   line=ir.source_line,
+                                   filepath=ir.source_filepath)
             match ir:
                 case inst if isinstance(inst, IRPadding):
-                    logger.debug(f" PASS2: Padding to"
-                                 f"0x{inst.target_address:04x}")
+                    self._handle_ir_padding(ir)
                 case inst if isinstance(inst, IRRawBytes):
                     self.rom_data.extend(inst.byte_values)
                     self._pp2(inst)
@@ -823,7 +864,7 @@ class Parser:
         """Handle '|' and '$' runes."""
         rune_token = self.current_token
         rune_char = rune_token.word[0]
-        # Consume '|' token
+        # Consume '|' token or '$' token
         self._advance()
 
         if not (self.current_token and
@@ -842,18 +883,45 @@ class Parser:
                               f" for padding rune '{rune_char}'",
                               token=self.current_token)
 
+        # Capture the state *before* changing current address
+        address_before_padding = self.current_address
+        target_address = 0
+
         # Absolute padding
         if rune_char == '|':
+            target_address = val
             logging.debug(f"Padding to absolute address"
-                          f" 0x{val:04x} (Line {rune_token.line})")
-            self.current_address = val
+                          f" 0x{target_address:04x} (Line {rune_token.line})")
+            if target_address < self.current_address:
+                logger.warning(f"Padding directive on line"
+                               f" {rune_token.line} rewinds"
+                               f" program counter from"
+                               f" 0x{self.current_address:04x} to"
+                               f" 0x{target_address:04x}")
+            self.current_address = target_address
+
         # Relative padding
         elif rune_char == '$':
+            target_address = self.current_address + val
             logging.debug(f"Padding by relative offset 0x{val:02x} "
                           f"(Line {rune_token.line})."
                           f" PC from 0x{self.current_address:04x}"
-                          f" to 0x{self.current_address + val:04x}")
+                          f" to 0x{self.current_address + target_address:04x}")
             self.current_address += val
+
+        padding_size = target_address - address_before_padding
+        if padding_size < 0:
+            # This is a rewind. For IR, this is 0 bytes added.
+            padding_size = 0
+        self.ir_stream.append(
+            IRPadding(
+                address=address_before_padding,
+                size=padding_size,
+                source_line=rune_token.line,
+                source_filepath=self._cur_ctx_filepath(),
+                target_address=target_address)
+        )
+        # Consume the hex literal/label token.
         self._advance()
 
     def _handle_literal_addressing_rune_op(self,
