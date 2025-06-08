@@ -591,10 +591,22 @@ class Parser:
 
         # -- Step 3: Calculate the final value to be written --
         value_to_write = 0
+
+        # Is this a "literal" addressing rune that's followed by a consuming
+        # opcode? e.g., LITERAL_REL8_VIA_LIT (from ,label), which is then used
+        # by JSR, JCN, etc.
+        is_literal_for_consuming_op = "LITERAL" in ir_node.ref_type
+
         # Check if it's any kind of relative ref.
         if "REL" in ir_node.ref_type:
             # Relative offsets calculated from the address of the next inst
             inst_end_addr = ir_node.address + ir_node.size
+
+            # --- THIS IS THE FIX --- If it's a LITERAL relative reference like
+            # `,label`, it's always followed by a 1-byte opcode (like JSR) that
+            # consumes it. We must account for that byte.
+            if is_literal_for_consuming_op:
+                inst_end_addr += 1
             value_to_write = target_addr - inst_end_addr
         else:
             # Absolute or Zero-Page addr used directly
@@ -1290,13 +1302,13 @@ class Parser:
         """
         token = self.current_token
         op_start_addr = self.current_address
+        # Consume '#'
+        self._advance()
 
         if not (self.current_token and
                 (self.current_token.type == TOKENTYPE.HEX_LITERAL
                  or self.current_token.type == TOKENTYPE.IDENTIFIER)):
             SyntaxError("Expected hex literal after #", token=token)
-        # Consume '#'
-        self._advance()
 
         hex_literal = self.current_token
         val = hex_literal.word
@@ -1332,7 +1344,7 @@ class Parser:
             # Create an IR node for the 1-byte value.
             self.ir_stream.append(
                 IRRawBytes(
-                    address=op_start_addr,
+                    address=op_start_addr + 1,
                     size=1,
                     source_line=hex_literal.line,
                     source_filepath=self._cur_ctx_filepath(),
@@ -1494,7 +1506,7 @@ class Parser:
         else:
             self.symbol_table[full_sub_label_name] = self.current_address
             logger.debug(f"  Defined sub-label"
-                         f"'{full_sub_label_name}' at"
+                         f" '{full_sub_label_name}' at"
                          f" 0x{self.current_address:04x}"
                          f" (Line {sub_label_token.line})")
 
