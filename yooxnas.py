@@ -1509,6 +1509,7 @@ class Parser:
         """
         # For hex literal as raw data
         data_token = self.current_token
+        op_addr = self.current_address
         data_word = data_token.word
         data_len = len(data_word)
         data_size = 0
@@ -1522,6 +1523,28 @@ class Parser:
         else:
             raise SyntaxError(f"Raw hex data {data_word} is too long",
                               token=data_token)
+        try:
+            val_int = int(data_word, 16)
+            byte_values = []
+            if data_size == 1:
+                byte_values.append(val_int & 0xFF)
+            elif data_size == 2:
+                # High byte, then low byte.
+                byte_values.append((val_int >> 8) & 0xFF)
+                byte_values.append(val_int & 0xFF)
+        except ValueError:
+            raise SyntaxError(f"Invalid hex value for raw data: '{data_word}'",
+                              token=data_token)
+        # Create and append the IR node.
+        self.ir_stream.append(
+            IRRawBytes(
+                address=op_addr,
+                size=data_size,
+                source_line=data_token.line,
+                source_filepath=self._cur_ctx_filepath(),
+                byte_values=byte_values
+            )
+        )
         logger.debug("  Raw Hex Data Byte(s): %s,"
                      " size: %s"
                      " (Line %s)",
