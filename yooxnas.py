@@ -362,7 +362,6 @@ class IRRawBytes(IRNode):
     byte_values: list[int]
 
 
-
 @dataclass
 class IROpcode(IRNode):
     """For simple 1-byte opcodes like BRK, DUP, ADD."""
@@ -610,12 +609,6 @@ class Parser:
                      f" at 0x{ir_node.address:04x}"
                      f" (ref_type: {ir_node.ref_type})")
 
-    def _warn_rewind(self, ir, final_rom_len):
-        logger.warning(f"  PASS2: Padding node resulted in address"
-                       f" 0x{final_rom_len:04x}, "
-                       f"which differs from directive target"
-                       f" 0x{ir.target_address:04x} (likely due to rewind).")
-
     def _handle_ir_padding(self, ir_node: IRNode):
         """Handle padding for Pass 2."""
         current_rom_len = len(self.rom_data)
@@ -647,13 +640,14 @@ class Parser:
         self.rom_data = bytearray()
 
         for ir in ir_stream:
-            current_rom_len = len(self.rom_data)
-            expected_address = ir.address
-            if expected_address > current_rom_len:
-                padding_needed = expected_address - current_rom_len
-                logger.debug(f" PASS2: Padding with {padding_needed} 0 bytes"
-                             f" to reach 0x{expected_address:04x}")
-                self.rom_data.extend([0x00] * padding_needed)
+            self._handle_ir_padding(ir)
+            # current_rom_len = len(self.rom_data)
+            # expected_address = ir.address
+            # if expected_address > current_rom_len:
+            #     padding_needed = expected_address - current_rom_len
+            #     logger.debug(f" PASS2: Padding with {padding_needed} 0 bytes"
+            #                  f" to reach 0x{expected_address:04x}")
+            #     self.rom_data.extend([0x00] * padding_needed)
             # This check handles rewinds or logic errors
             if ir.address != len(self.rom_data):
                 raise ParsingError(f"Pass 2 PC desync."
@@ -665,7 +659,20 @@ class Parser:
                                    filepath=ir.source_filepath)
             match ir:
                 case inst if isinstance(inst, IRPadding):
-                    self._handle_ir_padding(ir)
+                    # The _handle_ir_padding call above already padded up to
+                    # ir_node.address. Now, we must ensure padding extends from
+                    # there to the IRPadding node's target_address.
+                    current_rom_len = len(self.rom_data)
+                    if ir.target_address > current_rom_len:
+                        final_padding = ir.target_address - current_rom_len
+                        logger.debug(f"  PASS2: IRPadding node applying"
+                                     f" {final_padding} zero bytes to"
+                                     f" reach 0x{ir.target_address:04x}")
+                        self.rom_data.extend([0x00] * final_padding)
+                # The case where target_address < current_rom_len was already
+                # flagged as a warning/error by the sanity check in
+                # _handle_ir_padding if ir_node.address was also less. The
+                # logic inside _handle_ir_padding handles this desync error.
                 case inst if isinstance(inst, IRRawBytes):
                     self.rom_data.extend(inst.byte_values)
                     self._pp2(inst)
