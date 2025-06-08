@@ -641,22 +641,8 @@ class Parser:
 
         for ir in ir_stream:
             self._handle_ir_padding(ir)
-            # current_rom_len = len(self.rom_data)
-            # expected_address = ir.address
-            # if expected_address > current_rom_len:
-            #     padding_needed = expected_address - current_rom_len
-            #     logger.debug(f" PASS2: Padding with {padding_needed} 0 bytes"
-            #                  f" to reach 0x{expected_address:04x}")
-            #     self.rom_data.extend([0x00] * padding_needed)
-            # This check handles rewinds or logic errors
-            if ir.address != len(self.rom_data):
-                raise ParsingError(f"Pass 2 PC desync."
-                                   f" Expected address "
-                                   f" 0x{len(self.rom_data):04x}, "
-                                   f"but IR node is at"
-                                   f" 0x{ir.address:04x}.",
-                                   line=ir.source_line,
-                                   filepath=ir.source_filepath)
+
+            # Dispatch based on IR Node
             match ir:
                 case inst if isinstance(inst, IRPadding):
                     # The _handle_ir_padding call above already padded up to
@@ -1164,11 +1150,27 @@ class Parser:
 
     def _handle_opcode_token(self):
         op_token = self.current_token
-        # They're all 1 byte
+        op_addr = self.current_address
+        if not hasattr(op_token, 'value'):
+            raise ParsingError(f"Internal Error: OPCODE token"
+                               f" '{op_token.word}' is missing"
+                               f" a valid integer value attribute.",
+                               token=op_token)
+        # All UXN opcodes are 1 byte.
         size = 1
         logger.debug(f"  Opcode: {op_token.word}"
                      f" (Byte: {op_token.value:#04x}),"
                      f" size {size} (Line {op_token.line})")
+
+        self.ir_stream.append(
+            IROpcode(
+                address=op_addr,
+                size=size,
+                source_line=op_token.line,
+                source_filepath=self._cur_ctx_filepath(),
+                mnemonic=op_token.word,
+                byte_value=op_token.value)
+        )
         self.current_address += size
         self._advance()
 
@@ -1446,6 +1448,7 @@ class Parser:
         """Handle identifiers or opcodes."""
         id_token = self.current_token
         word = id_token.word
+        op_addr = self.current_address
         if word in self.macros:
             # It's a macro invocation.
             self._handle_macro_invocation(word, id_token.line)
@@ -1453,15 +1456,23 @@ class Parser:
             return
         elif self._is_purely_hex(word):
             hex_len = len(word)
+            byte_values = []
+
             if hex_len == 0:
                 raise SyntaxError("Empty Hex", token=id_token)
             elif hex_len <= 2:
                 size = 1
+                byte_values.append(int(word, 16))
                 logger.debug(f"Hex-like identifier (as raw byte)"
                              f", word: '{word}', size: '{size}'"
                              f", line: '{id_token.line}'")
             elif hex_len <= 4:
                 size = 2
+                val = int(word, 16)
+                # High byte
+                byte_values.append((val >> 8) & 0xFF)
+                # Low byte
+                byte_values.append(val & 0xFF)
                 logger.debug(f"Hex-like identifier (as raw short)"
                              f", word: '{word}', size: '{size}'"
                              f", line: '{id_token.line}'")
@@ -1470,6 +1481,27 @@ class Parser:
                                f", line: '{id_token.line}'."
                                " Treating as bare word call")
                 size = 3
+                self.ir_stream.append(
+                    IRLabelPlaceholder(
+                        address=op_addr,
+                        size=size,
+                        source_line=id_token.line,
+                        source_filepath=self._cur_ctx_filepath(),
+                        label_name=word,
+                        ref_type="JSR_REL16_BAREWORD",
+                        placeholder_size=2,
+                        # JSR-like opcode
+                        implied_opcode=0x60)
+                )
+            if size in [1, 2]:
+                self.ir_stream.append(
+                    IRRawBytes(
+                        address=op_addr,
+                        size=size,
+                        source_line=id_token.line,
+                        source_filepath=self._cur_ctx_filepath(),
+                        byte_values=byte_values)
+                )
         else:
             # It's a bare word, not a known opcode or a macro.
             # uxnasm.c treats this as a JSR-like call,
@@ -1478,6 +1510,17 @@ class Parser:
             logger.debug(f"  Bare Word Call"
                          f" (JSR-like to '{word}',)"
                          f" size {size} bytes (Line {id_token.line})")
+            self.ir_stream.append(
+                IRLabelPlaceholder(
+                    address=op_addr,
+                    size=size,
+                    source_line=id_token.line,
+                    source_filepath=self._cur_ctx_filepath(),
+                    label_name=word,
+                    ref_type="JSR_REL16_BAREWORD",
+                    placeholder_size=2,
+                    implied_opcode=0x60)
+            )
         self.current_address += size
         self._advance()
 
