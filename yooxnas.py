@@ -448,6 +448,7 @@ class Parser:
 
         self.symbol_table = {}
         self.macros = {}
+        self.macro_call_stack = []
         self.ir_stream = []
         # Start at 0. Uxn ROMs will usually set this to 0x0100
         self.current_address = 0x0000
@@ -582,7 +583,8 @@ class Parser:
         if ir_node.placeholder_size == 1:
             # For relative 8-bit jumps,
             # check if offset in range.
-            if "REL" in ir_node.ref_type and not (-128 <= value_to_write <= 127):
+            if ("REL" in ir_node.ref_type and
+                    not (-128 <= value_to_write <= 127)):
                 raise ParsingError(f"Relative jump to '{ir_node.label_name}'"
                                    f"is too far: ({value_to_write} bytes)."
                                    " Must be between -128 and 127.",
@@ -591,7 +593,8 @@ class Parser:
             # For zero-page, check if address is in range.
             if "ZP" in ir_node.ref_type and not (0 <= value_to_write <= 0xFF):
                 # TODO: Write a convenience function for PEs
-                raise ParsingError(f"Zero-page address for '{ir_node.label_name}'"
+                raise ParsingError(f"Zero-page address for "
+                                   f"'{ir_node.label_name}'"
                                    f"(0x{value_to_write:02x})"
                                    " is outside the zero-page (0x00-0xff).",
                                    line=ir_node.source_line,
@@ -1607,53 +1610,67 @@ class Parser:
 
         # PC (self.current_address) is NOT advanced for a macro def.
 
-    def _handle_macro_invocation(self,
-                                 macro_name: str,
-                                 invocation_line: int):
-        """Process a macro invocation during Pass1.
+    def _handle_macro_invocation(self, macro_name: str, invocation_line: int):
+        """Handle a macro invocation.
 
-        Parse stored tokens to update current_address.
+        Looks up the macro, saves parser state, processes the macro's tokens,
+        and then restores the state.
         """
-        logger.debug(f"Invoking Macro: '{macro_name}'"
-                     f" (called on Line {invocation_line})")
-        if macro_name not in self.macros:
-            raise ParsingError(f"Attempted to invoke undefined macro"
-                               f" '{macro_name}'.", line=invocation_line)
+        logger.debug(f"  Expanding macro '{macro_name}'"
+                     f"(called on line {invocation_line})")
 
-        macro_tokens: list[Token] = self.macros[macro_name]
-        if not macro_tokens:
-            logger.debug(f"  Macro '{macro_name}' is empty.")
+        # Prevent infinite recursion.
+        if macro_name in self.macro_call_stack:
+            cs = self.macro_call_stack
+            raise ParsingError(f"Infinite macro recursion detected for macro"
+                               f"'{macro_name}'. "
+                               f"Call stack: {' -> '.join(cs)}"
+                               f" -> {macro_name}",
+                               line=invocation_line,
+                               filepath=self._current_context_filepath())
+
+        # --- Look up and Prepare Macro Tokens ---
+        macro_body_tokens = self.macros.get(macro_name)
+        if macro_body_tokens is None:
+            # This should not be hit if the dispatcher logic is correct (if
+            # word in self.macros)
+            raise ParsingError(f"Internal Error: Attempted to invoke undefined"
+                               f" macro '{macro_name}'",
+                               line=invocation_line,
+                               filepath=self._current_context_filepath())
+
+        # Handle empty macros.
+        if not macro_body_tokens:
+            logger.debug(f"    Macro '{macro_name}' is empty.")
             return
 
-        logger.debug(f"    Expanding macro '{macro_name}'"
-                     f" with {len(macro_tokens)} tokens"
-                     f" Current PC before expansion: "
-                     f" 0x{self.current_address:04x}")
+        # Save the current parsing state.
+        original_tokens = self.tokens
+        original_token_idx = self.token_idx
+        original_current_token = self.current_token
 
-        # Save current parsing state.
-        orig_tokens = self.tokens
-        orig_token_idx = self.token_idx
-        orig_current_token = self.current_token
-
-        # Setup parser to process token list.
-        self.tokens = macro_tokens
-        self.token_idx = 0
-        if self.tokens:
-            self.current_token = self.tokens[self.token_idx]
-        else:
-            self.current_token = None
+        self.macro_call_stack.append(macro_name)
 
         try:
-            while self.current_token is not None:
-                self._dispatch_current_token_for_pass1()
+            # Set new state for macro expansion
+            logger.debug(f"    -> Entering macro '{macro_name}' context."
+                         f" PC is 0x{self.current_address:04x}")
+            self.tokens = macro_body_tokens
+            self.token_idx = 0
+            self.current_token = self.tokens[0]
+
+            # Parse macro tokens.
+            self._process_token_stream()
+
         finally:
-            # Restore original parsing state
-            self.tokens = orig_tokens
-            self.token_idx = orig_token_idx
-            self.current_token = orig_current_token
-        logger.debug(f"    Finished expanding macro '{macro_name}'."
-                     f" PC after expansion:"
-                     f" 0x{self.current_address:04x}")
+            # Restore original parser state.
+            self.tokens = original_tokens
+            self.token_idx = original_token_idx
+            self.current_token = original_current_token
+
+            self.macro_call_stack.pop()
+            logger.debug(f"    <- Exiting macro '{macro_name}' context."
+                         f"PC is now 0x{self.current_address:04x}")
 
 
 def parse_args() -> argparse.Namespace:
