@@ -505,7 +505,28 @@ class Parser:
 
     def write_rom(self, output_filename=None):
         """Write out the rom file."""
-        raise NotImplementedError
+        logger.debug(f"Preparing to write ROM to {output_filename}.")
+
+        # The start address for program data in a UXN ROM
+        ROM_START_ADDRESS = 0x0100
+
+        full_rom_image = self.rom_data
+        if len(full_rom_image) <= ROM_START_ADDRESS:
+            logging.warning(f"No program data found at or after"
+                            f" address 0x{ROM_START_ADDRESS:04x}."
+                            " Creating an empty ROM file.")
+            bytes_to_write = bytearray()
+        else:
+            # Slice to only get data from 0x0100 on
+            bytes_to_write = full_rom_image[ROM_START_ADDRESS:]
+        try:
+            with open(output_filename, "wb") as rf:
+                rf.write(bytes_to_write)
+                logger.info(f"Successfully wrote {len(bytes_to_write)}"
+                            f" bytes to {output_filename}.")
+        except IOError as e:
+            raise ParsingError(f"Failed to write ROM file '{output_filename}':"
+                               f" {e}")
 
     def _process_token_stream(self):
         try:
