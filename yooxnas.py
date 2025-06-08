@@ -1285,9 +1285,12 @@ class Parser:
     def _handle_hash_literal(self):
         """Handle hash literals.
 
-        These become LIT/LIT2 + value.
+        These become LIT/LIT2 + value. Calculates size and generates
+        IR nodes for the implied LIT/LIT2 opcodes and the value.
         """
         token = self.current_token
+        op_start_addr = self.current_address
+
         if not (self.current_token and
                 (self.current_token.type == TOKENTYPE.HEX_LITERAL
                  or self.current_token.type == TOKENTYPE.IDENTIFIER)):
@@ -1300,7 +1303,7 @@ class Parser:
 
         try:
             # Test conversion to see if it's a valid number.
-            _ = int(val, 16)
+            val_int = int(val, 16)
         except ValueError:
             raise SyntaxError(f"Invalid hex value '{val}'"
                               f" after '#'", token=self.current_token)
@@ -1313,9 +1316,57 @@ class Parser:
         elif val_len <= 2:
             size = 2
             logger.debug(f"LIT #{val}, size {size} (Line {token.line})")
+
+            # Create IR node for the LIT opcode.
+            lit_opcode_byte = get_opcode_byte("LIT")
+            self.ir_stream.append(
+                IROpcode(
+                    address=op_start_addr,
+                    size=1,
+                    source_line=token.line,
+                    source_filepath=self._cur_ctx_filepath(),
+                    mnemonic="LIT",
+                    byte_value=lit_opcode_byte
+                )
+            )
+            # Create an IR node for the 1-byte value.
+            self.ir_stream.append(
+                IRRawBytes(
+                    address=op_start_addr,
+                    size=1,
+                    source_line=hex_literal.line,
+                    source_filepath=self._cur_ctx_filepath(),
+                    byte_values=[val_int & 0xFF]
+                )
+            )
         elif val_len <= 4:
             size = 3
             logger.debug(f"LIT2 #{val}, size {size} (Line {token.line})")
+            # Create IR node for LIT2 opcode.
+            lit2_opcode_byte = get_opcode_byte("LIT2")
+            self.ir_stream.append(
+                IROpcode(
+                    address=op_start_addr,
+                    size=1,
+                    source_line=token.line,
+                    source_filepath=self._cur_ctx_filepath(),
+                    mnemonic="LIT2",
+                    byte_value=lit2_opcode_byte
+                )
+            )
+            # Create IR node for 2-byte value (high byte, then low byte).
+            high_byte = (val_int >> 8) & 0xFF
+            low_byte = val_int & 0xFF
+            self.ir_stream.append(
+                IRRawBytes(
+                    # Starts after the LIT2 opcode.
+                    address=op_start_addr + 1,
+                    size=2,
+                    source_line=hex_literal.line,
+                    source_filepath=self._cur_ctx_filepath(),
+                    byte_values=[high_byte, low_byte]
+                )
+            )
         else:
             raise SyntaxError(f"Hex literal too long after #: {val}",
                               token=token)
