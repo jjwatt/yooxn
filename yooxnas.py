@@ -691,6 +691,8 @@ class Parser:
                 self._handle_padding_rune()
             case TOKENTYPE.RUNE_AT:
                 self._handle_label_definition()
+            case TOKENTYPE.RUNE_AMPERSAND:
+                self._handle_standalone_sub_label()
             case TOKENTYPE.RAW_ASCII_CHUNK:
                 self._handle_raw_ascii_chunk()
             case TOKENTYPE.RUNE_HASH:
@@ -1108,7 +1110,9 @@ class Parser:
                     label_name=target_label_name,
                     ref_type=ref_type,
                     implied_opcode=None,
-                    source_line=rune_token.line)
+                    source_line=rune_token.line,
+                    source_filepath=self._cur_ctx_filepath(),
+                    placeholder_size=placeholder_size)
             )
             self.current_address += prefix_operation_size
             logger.debug(f"    ...to 0x{self.current_address:04x}."
@@ -1140,7 +1144,9 @@ class Parser:
                     label_name=displayed_label,
                     ref_type=ref_type,
                     implied_opcode=None,
-                    source_line=rune_token.line)
+                    source_line=rune_token.line,
+                    source_filepath=self._cur_ctx_filepath(),
+                    placeholder_size=placeholder_size)
             )
             logger.debug(f"  Raw Addressing Rune Op:"
                          f" {rune_token.word}{displayed_label}, "
@@ -1382,6 +1388,46 @@ class Parser:
         while (self.current_token
                and self.current_token.type == TOKENTYPE.RUNE_AMPERSAND):
             self._handle_sub_label_field(parent_label_name)
+
+    def _handle_standalone_sub_label(self):
+        """Handle a standalone sub-label definition (e.g., '&loop').
+
+        Defines a label within the current parent scope stored in
+        self.current_scope.
+        """
+        ampersand_token = self.current_token
+        # Consume '&'
+        self._advance()
+
+        if not (self.current_token and
+                self.current_token.type == TOKENTYPE.IDENTIFIER):
+            raise SyntaxError("Expected sub-label name (IDENTIFIER)"
+                              " after standalone '&'.",
+                              token=ampersand_token)
+        sub_label_token = self.current_token
+        sub_label_name = sub_label_token.word
+
+        if not self.current_scope:
+            raise SyntaxError(f"Sub-label '&{sub_label_name}' defined outside"
+                              " of a parent '@' scope.",
+                              token=sub_label_token)
+
+        full_sub_label_name = f"{self.current_scope}/{sub_label_name}"
+
+        if full_sub_label_name in self.symbol_table:
+            logger.warning(f"Duplicate sub-label definition for"
+                           f"'{full_sub_label_name}'"
+                           " on line {sub_label_token.line}.")
+        else:
+            self.symbol_table[full_sub_label_name] = self.current_address
+            logger.debug(f"  Defined sub-label"
+                         f"'{full_sub_label_name}' at"
+                         f" 0x{self.current_address:04x}"
+                         f" (Line {sub_label_token.line})")
+
+        # This directive only defines a label; it has no size itself.
+        # The following instructions will advance the PC.
+        self._advance()
 
     def _handle_standalone_hex_data(self):
         """Handle raw hex literals.
