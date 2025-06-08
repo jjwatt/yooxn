@@ -1006,8 +1006,9 @@ class Parser:
             is_sub_label_ref = False
             label_prefix = ""
             if (self.current_token and
-                    self.current_token.type == TOKENTYPE.RUNE_AMPERSAND):
-                label_prefix = "&"
+                    (self.current_token.type == TOKENTYPE.RUNE_AMPERSAND or
+                     self.current_token.type == TOKENTYPE.RUNE_FORWARDSLASH)):
+                label_prefix = self.current_token.word
                 is_sub_label_ref = True
                 self._advance()
 
@@ -1503,6 +1504,8 @@ class Parser:
             self._handle_macro_invocation(word, id_token.line)
             self._advance()
             return
+
+        # Not a macro or opcode
         elif self._is_purely_hex(word):
             hex_len = len(word)
             byte_values = []
@@ -1556,6 +1559,17 @@ class Parser:
             # uxnasm.c treats this as a JSR-like call,
             # with a 16-bit relative offset.
             size = 3
+            target_label_name = ""
+            # Check for sub-label prefixes
+            if word.startswith('&') or word.startswith('/'):
+                if not self.current_scope:
+                    raise SyntaxError(f"Sub-label reference '{word}'"
+                                      "used outside of a parent '@' scope.",
+                                      token=id_token)
+                base_label_name = word[1:]
+                target_label_name = f"{self.current_scope}/{base_label_name}"
+            else:
+                target_label_name = word
             logger.debug(f"  Bare Word Call"
                          f" (JSR-like to '{word}',)"
                          f" size {size} bytes (Line {id_token.line})")
@@ -1565,7 +1579,7 @@ class Parser:
                     size=size,
                     source_line=id_token.line,
                     source_filepath=self._cur_ctx_filepath(),
-                    label_name=word,
+                    label_name=target_label_name,
                     ref_type="JSR_REL16_BAREWORD",
                     placeholder_size=2,
                     implied_opcode=0x60)
