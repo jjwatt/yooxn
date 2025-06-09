@@ -450,8 +450,8 @@ class Parser:
         self.macros = {}
         self.macro_call_stack = []
         self.ir_stream = []
-        # Start at 0. Uxn ROMs will usually set this to 0x0100
-        self.current_address = 0x0000
+        # Assume start at 0x0100 for Zero-Page.
+        self.current_address = 0x0100
         self.rom_bytes = bytearray()
         self.current_scope = ""
 
