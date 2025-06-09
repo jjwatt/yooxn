@@ -451,7 +451,7 @@ class Parser:
         self.macro_call_stack = []
         self.ir_stream = []
         # Assume start at 0x0100 for Zero-Page.
-        self.current_address = 0x0100
+        self.current_address = 0x0000
         self.rom_bytes = bytearray()
         self.current_scope = ""
 
@@ -542,11 +542,30 @@ class Parser:
     def parse_pass1(self):
         """Parse tokens Pass #1."""
         logger.debug("Starting parser pass 1")
-        if self.current_token is None and self.tokens:
-            self.current_token = self.tokens[0]
-        elif not self.tokens:
+
+        if not self.tokens or self.tokens[0].type == TOKENTYPE.EOF:
             logger.debug('No tokens to parse.')
-            return
+            return self.ir_stream, self.symbol_table
+
+        # pre-flight check.
+        first_meaningful_token = self.tokens[0]
+        if first_meaningful_token.type != TOKENTYPE.RUNE_PIPE:
+            # If the file doesn't start with absolute padding,
+            # implicitly pad to 0x0100
+            logger.debug("First token is not '|'."
+                         " Creating implicit padding to 0x0100.")
+            target_address = 0x0100
+            # Create IR for the implicit padding.
+            self.ir_stream.append(IRPadding(
+                address=self.current_address,
+                size=target_address - self.current_address,
+                source_line=1,
+                source_filepath=self._cur_ctx_filepath(),
+                target_address=target_address
+            ))
+            self.current_address = target_address
+
+        self.current_token = self.tokens[0]
 
         self._process_token_stream()
 
