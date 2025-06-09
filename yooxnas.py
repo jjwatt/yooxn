@@ -450,7 +450,7 @@ class Parser:
         self.macros = {}
         self.macro_call_stack = []
         self.ir_stream = []
-        # Assume start at 0x0100 for Zero-Page.
+        # Start at 0x0000
         self.current_address = 0x0000
         self.rom_bytes = bytearray()
         self.current_scope = ""
