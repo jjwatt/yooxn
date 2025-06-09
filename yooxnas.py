@@ -3,7 +3,7 @@
 import argparse
 import logging
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import Path
 from typing import Optional
@@ -489,20 +489,6 @@ class Parser:
         return all(self._is_hex_digit(char)
                    for char in word)
 
-    def get_opcode_byte(self, op_word: str) -> int | None:
-        """
-        Simplified version of uxnasm.c's findopcode.
-
-        Returns the opcode byte or None if not a valid opcode.
-        This should handle base opcodes and modes like 'k', '2', 'r'.
-        For Pass 1 size calculation, we only care IF it's an opcode (size 1).
-        Actual byte value is for Pass 2.
-        """
-        base_op = op_word[:3].upper()
-        if base_op not in self.OPS:
-            return None
-        return 0x01
-
     def write_rom(self, output_filename=None):
         """Write out the rom file."""
         logger.debug(f"Preparing to write ROM to {output_filename}.")
@@ -621,9 +607,9 @@ class Parser:
             # Relative offsets calculated from the address of the next inst
             inst_end_addr = ir_node.address + ir_node.size
 
-            # --- THIS IS THE FIX --- If it's a LITERAL relative reference like
-            # `,label`, it's always followed by a 1-byte opcode (like JSR) that
-            # consumes it. We must account for that byte.
+            # If it's a LITERAL relative reference like `,label`, it's always
+            # followed by a 1-byte opcode (like JSR) that consumes it. We must
+            # account for that byte.
             if is_literal_for_consuming_op:
                 inst_end_addr += 1
             value_to_write = target_addr - inst_end_addr
