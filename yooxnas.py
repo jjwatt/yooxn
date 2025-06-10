@@ -2,13 +2,14 @@
 """uxntal assembler."""
 import argparse
 import logging
+import sys
 
 from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import Path
 from typing import Optional
 
-logging.basicConfig(level=logging.DEBUG,
+logging.basicConfig(level=logging.INFO,
                     format="%(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
@@ -322,6 +323,7 @@ class Lexer:
         while True:
             token = self.scan_token()
             tokens.append(token)
+            logger.debug(token.print())
             if token.type == TOKENTYPE.EOF:
                 break
             if token.type == TOKENTYPE.ILLEGAL:
@@ -1854,6 +1856,9 @@ def parse_args() -> argparse.Namespace:
                         "--output",
                         help="Output file to write",
                         default="output.rom")
+    parser.add_argument("--debug",
+                        help="Set loglevel to DEBUG",
+                        action='store_true')
     args = parser.parse_args()
     return args
 
@@ -1861,6 +1866,9 @@ def parse_args() -> argparse.Namespace:
 def main():
     """Handle parsing args and calling assembler."""
     args = parse_args()
+    if args.debug:
+        logger.setLevel(logging.DEBUG)
+        logger.debug('Python v%s', ('%d.%d.%d' % sys.version_info[:3]))
     if args.file:
         file_path = Path(args.file)
         with open(args.file, 'r') as asmfile:
