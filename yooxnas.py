@@ -1850,7 +1850,10 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("file",
                         help="tal file to assemble")
-    # TODO: Take more than one file
+    parser.add_argument("-o",
+                        "--output",
+                        help="Output file to write",
+                        default="output.rom")
     args = parser.parse_args()
     return args
 
@@ -1865,8 +1868,6 @@ def main():
             lexer = Lexer(source_code, filename=file_path)
             tokens = lexer.scan_all_tokens()
             logger.debug("Finished tokenizing.")
-            # for token in tokens:
-            #     token.print()
 
             if tokens and tokens[-1].type != TOKENTYPE.ILLEGAL:
                 parser = Parser(tokens, cur_filepath=file_path)
@@ -1876,7 +1877,7 @@ def main():
                 except ParsingError:
                     logger.debug("Parsing error in Pass 2")
                     raise
-                parser.write_rom("output.rom")
+                parser.write_rom(args.output)
             else:
                 print("Lexer failed. Parsing skipped.")
 
