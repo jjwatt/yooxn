@@ -235,10 +235,6 @@ class Lexer:
         char_lower = char.lower()
         return ('0' <= char_lower <= '9' or 'a' <= char_lower <= 'f')
 
-    def _is_purely_hex(self, word: str) -> bool:
-        return all(self._is_hex_digit(char)
-                   for char in word)
-
     def scan_token(self) -> Token:
         """Scan a single token."""
         self._skip_whitespace_and_comments()
