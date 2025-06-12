@@ -450,6 +450,7 @@ class Parser:
         self.ir_stream = []
         # Start at 0x0000
         self.current_address = 0x0000
+        self.main_code_block_started = False
         self.rom_bytes = bytearray()
         self.current_scope = ""
 
@@ -523,6 +524,31 @@ class Parser:
             logger.debug("Parser Pass 1 aborted due to error.")
             raise
 
+    def _ensure_default_start_page(self):
+        """Apply default padding if we're still in the zero page."""
+        if not self.main_code_block_started and self.current_address < 0x0100:
+            logger.debug("First code/data directive encountered below"
+                         " page 0x0100")
+            logger.debug("Applying default padding.")
+            target_address = 0x0100
+            padding_size = target_address - self.current_address
+            # Create an IR node for this implict padding
+            # for Pass 2 to handle.
+            self.ir_stream.append(
+                IRPadding(
+                    address=self.current_address,
+                    size=padding_size,
+                    source_line=self.current_token.line,
+                    source_filepath=self._cur_ctx_filepath(),
+                    target_address=target_address
+                )
+            )
+            self.current_address = target_address
+
+        # Once this check is done, we consider the main
+        # code block started, so don't run again.
+        self.main_code_block_started = True
+
     def parse_pass1(self):
         """Parse tokens Pass #1."""
         logger.debug("Starting parser pass 1")
@@ -530,24 +556,6 @@ class Parser:
         if not self.tokens or self.tokens[0].type == TOKENTYPE.EOF:
             logger.debug('No tokens to parse.')
             return self.ir_stream, self.symbol_table
-
-        # pre-flight check.
-        first_meaningful_token = self.tokens[0]
-        if first_meaningful_token.type != TOKENTYPE.RUNE_PIPE:
-            # If the file doesn't start with absolute padding,
-            # implicitly pad to 0x0100
-            logger.debug("First token is not '|'."
-                         " Creating implicit padding to 0x0100.")
-            target_address = 0x0100
-            # Create IR for the implicit padding.
-            self.ir_stream.append(IRPadding(
-                address=self.current_address,
-                size=target_address - self.current_address,
-                source_line=1,
-                source_filepath=self._cur_ctx_filepath(),
-                target_address=target_address
-            ))
-            self.current_address = target_address
 
         self.current_token = self.tokens[0]
 
@@ -891,11 +899,13 @@ class Parser:
         else:
             token = self.tokens[-1]
         raise SyntaxError(f"Unclosed anonymous block {{"
-                          f" starting on line {open_brace_line}.",
+                          f" starting on line {open_brace_token.line}.",
                           token=token)
 
     def _handle_padding_rune(self):
         """Handle '|' and '$' runes."""
+        # Explicit padding always marks the start of the main block.
+        self.main_code_block_started = True
         rune_token = self.current_token
         rune_char = rune_token.word[0]
         # Consume '|' token or '$' token
@@ -972,6 +982,7 @@ class Parser:
                              (e.g., LIT2's opcode, JMI's 0x40)
         placeholder_size: 1 for byte, 2 for short (0xff or 0xffff)
         """
+        self._ensure_default_start_page()
         rune_token = self.current_token
         op_start_address = self.current_address
         # Consume the main addressing rune (';', '?', '!', ',', '.')
@@ -1104,6 +1115,7 @@ class Parser:
 
         These directly reserve placeholder_size bytes for an address/offset.
         """
+        self._ensure_default_start_page()
         rune_token = self.current_token
         op_start_address = self.current_address
 
@@ -1280,6 +1292,7 @@ class Parser:
 
         These are prefixed with '"', e.g. "Hello
         """
+        self._ensure_default_start_page()
         token = self.current_token
         content = token.word
         size = len(content)
@@ -1303,6 +1316,7 @@ class Parser:
         These become LIT/LIT2 + value. Calculates size and generates
         IR nodes for the implied LIT/LIT2 opcodes and the value.
         """
+        self._ensure_default_start_page()
         token = self.current_token
         op_start_addr = self.current_address
         # Consume '#'
@@ -1523,6 +1537,7 @@ class Parser:
         These are literals without LIT or # in front of them.
         """
         # For hex literal as raw data
+        self._ensure_default_start_page()
         data_token = self.current_token
         op_addr = self.current_address
         data_word = data_token.word
@@ -1606,6 +1621,7 @@ class Parser:
 
     def _handle_identifier_token(self):
         """Handle identifiers or opcodes."""
+        self._ensure_default_start_page()
         id_token = self.current_token
         word = id_token.word
         op_addr = self.current_address
