@@ -561,10 +561,6 @@ class Parser:
 
         self._process_token_stream()
 
-        # This part is outside the try...except, will run even if an
-        # error occurred mid-way which might be okay for seeing
-        # partial results, or you can move it inside the try.  Or only
-        # print if no error occurred by checking a flag.
         logger.debug("Parser Pass 1 Finished.")
         logger.debug("Symbol Table:")
         for label, address in self.symbol_table.items():
@@ -820,7 +816,6 @@ class Parser:
                              f"'{self.current_token.word}' type: {token_type}"
                              f" (Line {self.current_token.line})")
                 self._advance()
-            # Default case for any other unhandled token types
             case _:
                 self._advance()
                 # This should ideally be an error for unexpected tokens.
