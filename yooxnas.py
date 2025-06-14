@@ -251,7 +251,7 @@ class Lexer:
             case '@': return self._add_token(TOKENTYPE.RUNE_AT)
             case '&': return self._add_token(TOKENTYPE.RUNE_AMPERSAND)
             case ',': return self._add_token(TOKENTYPE.RUNE_COMMA)
-            case '_': return self._add_token(TOKENTYPE.RUNE_UNDERSCORE)
+            # case '_': return self._add_token(TOKENTYPE.RUNE_UNDERSCORE)
             case '.': return self._add_token(TOKENTYPE.RUNE_PERIOD)
             case '-': return self._add_token(TOKENTYPE.RUNE_MINUS)
             case ';': return self._add_token(TOKENTYPE.RUNE_SEMICOLON)
