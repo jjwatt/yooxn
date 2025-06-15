@@ -208,19 +208,28 @@ class Lexer:
                 self._advance()
             # Start block comment
             elif char == '(':
+                # When we see the first '(', start a depth counter.
+                depth = 1
+                comment_start_line = self.line
+                # Consume initial '('
                 self._advance()
-                # Consume until ')' or EOF
-                while self._peek() != ')' and not self._is_at_end():
-                    if self._peek() == '\n':
+
+                while not self._is_at_end() and depth > 0:
+                    peeked_char = self._peek()
+                    if peeked_char == '(':
+                        depth += 1
+                    elif peeked_char == ')':
+                        depth -= 1
+                    elif peeked_char == '\n':
                         self.line += 1
+                    # Consume char and continue looping.
                     self._advance()
-                # Consume the closeing ')'
-                if not self._is_at_end() and self._peek() == ')':
-                    self._advance()
-                else:
-                    # TODO: Handle unclosed comment
-                    logger.warning(f"Warning: unclosed comment"
-                                   f" on line {self.line}")
+                if depth > 0:
+                    # We hit the end of the file before closing comment.
+                    raise ParsingError("Unclosed comment block"
+                                       f" line {comment_start_line}.",
+                                       line=comment_start_line,
+                                       filename=self.filename)
             else:
                 # Found a non-whitespace/non-comment char
                 break
