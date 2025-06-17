@@ -577,6 +577,7 @@ class Parser:
         logger.debug(f"Final Calculated Address"
                      f" (after pass 1 processing):"
                      f" 0x{self.current_address:04x}")
+        self.ir_stream.sort(key=lambda node: node.address)
         return self.ir_stream, self.symbol_table
 
     def _pp2(self, obj):
@@ -1459,7 +1460,19 @@ class Parser:
             logger.debug("    Sub-label '%s/%s' field occupies %s byte(s).",
                          parent_label_name, sub_label_token.word, size)
             logger.debug("       Advancing PC.")
+            # Represent reserved space as a chunk of zero bytes.
+            self.ir_stream.append(
+                IRRawBytes(
+                    address=self.current_address,
+                    size=size,
+                    source_line=dollar_token.line,
+                    source_filepath=self._cur_ctx_filepath(),
+                    byte_values=([0x00] * size)
+                )
+            )
+            # Advance PC after creating the IR node.
             self.current_address += size
+            # Consume hex size literal.
             self._advance()
 
     def _handle_label_definition(self):
