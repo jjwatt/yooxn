@@ -941,32 +941,14 @@ class Parser:
                               f" for padding rune '{rune_char}'",
                               token=self.current_token)
 
-        # Capture the state *before* changing current address
-        address_before_padding = self.current_address
-        target_address = 0
-
         # Absolute padding
         if rune_char == '|':
             target_address = val
-            # NEW: Handle rewinds
             if target_address < self.current_address:
                 logger.warning(f"Padding directive on line {rune_token.line}"
                                " rewinds program counter from"
                                f" 0x{self.current_address:04x} to"
                                f" 0x{target_address:04x}.")
-                # Prune any IR nodes that would be overwritten by
-                # this rewind. We keep only the nodes that start and
-                # end before the new target address.
-                original_node_count = len(self.ir_stream)
-                self.ir_stream = [
-                    node for node in self.ir_stream
-                    if (node.address + node.size) <= target_address
-                ]
-                pruned_count = original_node_count - len(self.ir_stream)
-                if pruned_count > 0:
-                    logger.debug(f"  Rewind invalidated {pruned_count}"
-                                 " previously generated IR nodes.")
-
             self.current_address = target_address
 
         # Relative padding
@@ -978,18 +960,6 @@ class Parser:
                           f" to 0x{self.current_address + target_address:04x}")
             self.current_address += val
 
-        padding_size = target_address - address_before_padding
-        if padding_size < 0:
-            # This is a rewind. For IR, this is 0 bytes added.
-            padding_size = 0
-        self.ir_stream.append(
-            IRPadding(
-                address=address_before_padding,
-                size=padding_size,
-                source_line=rune_token.line,
-                source_filepath=self._cur_ctx_filepath(),
-                target_address=target_address)
-        )
         # Consume the hex literal/label token.
         self._advance()
 
