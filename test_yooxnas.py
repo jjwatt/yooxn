@@ -84,7 +84,6 @@ class TestComments(unittest.TestCase):
         self.test_out = Path('test_out')
         self.test_out.mkdir(exist_ok=True)
 
-    @skip("broken")
     def testMath32(self):
         load_and_parse_file('examples/math32.tal',
                             'test_out/math32.rom')
