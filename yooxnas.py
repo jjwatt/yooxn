@@ -571,13 +571,22 @@ class Parser:
         self._process_token_stream()
 
         logger.debug("Parser Pass 1 Finished.")
+
+        # NEW: Resolve overwrites and sort IR stream by address.
+        # Simulate uxnasm.c's behavior where later definitions
+        # at the same address overwrite earlier ones.
+        logger.debug("Resolve address overwrites and sorting IR stream...")
+        # Use a dict to keep only the LAST node defined at each address.
+        final_ir_map = {node.address: node for node in self.ir_stream}
+        final_ir_stream = sorted(final_ir_map.values(),
+                                 key=lambda node: node.address)
+        self.ir_stream = final_ir_stream
         logger.debug("Symbol Table:")
         for label, address in self.symbol_table.items():
             logger.debug(f"\t {label}: 0x{address:04x}")
         logger.debug(f"Final Calculated Address"
                      f" (after pass 1 processing):"
                      f" 0x{self.current_address:04x}")
-        self.ir_stream.sort(key=lambda node: node.address)
         return self.ir_stream, self.symbol_table
 
     def _pp2(self, obj):
@@ -939,14 +948,25 @@ class Parser:
         # Absolute padding
         if rune_char == '|':
             target_address = val
-            logging.debug(f"Padding to absolute address"
-                          f" 0x{target_address:04x} (Line {rune_token.line})")
+            # NEW: Handle rewinds
             if target_address < self.current_address:
-                logger.warning(f"Padding directive on line"
-                               f" {rune_token.line} rewinds"
-                               f" program counter from"
+                logger.warning(f"Padding directive on line {rune_token.line}"
+                               " rewinds program counter from"
                                f" 0x{self.current_address:04x} to"
-                               f" 0x{target_address:04x}")
+                               f" 0x{target_address:04x}.")
+                # Prune any IR nodes that would be overwritten by
+                # this rewind. We keep only the nodes that start and
+                # end before the new target address.
+                original_node_count = len(self.ir_stream)
+                self.ir_stream = [
+                    node for node in self.ir_stream
+                    if (node.address + node.size) <= target_address
+                ]
+                pruned_count = original_node_count - len(self.ir_stream)
+                if pruned_count > 0:
+                    logger.debug(f"  Rewind invalidated {pruned_count}"
+                                 " previously generated IR nodes.")
+
             self.current_address = target_address
 
         # Relative padding
