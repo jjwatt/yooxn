@@ -1,0 +1,491 @@
+( build: uxnasm src/drif.tal drif.rom
+| start: uxnemu drif.rom )
+
+|00 @System/vector $2 &expansion $2 &wst $1 &rst $1 &metadata $2 &r $2 &g $2 &b $2 &debug $1 &state $1
+|10 @Console/vector $2 &read $5 &type $1 &write $1 &error $1
+|20 @Screen/vector $2 &width $2 &height $2 &auto $1 &pad $1 &x $2 &y $2 &addr $2 &pixel $1 &sprite $1
+|80 @Controller/vector $2 &button $1 &key $1
+|90 @Mouse/vector $2 &x $2 &y $2 &state $1 &pad $3 &sx $2 &sy $1 &sy-lb $1
+|a0 @File/vector $2 &success $1 &success-lb $1 &stat $2 &delete $1 &append $1 &name $2 &length $2 &read $2 &write $2
+
+(
+@|enums )
+
+|0012 @header/height
+
+|000
+
+	@src/buf $2f &cap $1
+	@dst/buf $2f &cap $1
+	@token/buf $2f &cap $1
+	@scope/buf $2f &cap $1
+
+|100
+
+@on-reset ( -> )
+	;meta #06 DEO2
+	theme/<load>
+	#0110 #00d4 window/<set-size>
+	;dict/reset scope/<set>
+	;src/on-console .Console/vector DEO2
+	<redraw-all>
+	;on-mouse .Mouse/vector DEO2
+	BRK
+
+@on-mouse ( -> )
+	cursor/<update>
+	.Mouse/state DEI ?{ BRK }
+	&check-hit ( -> )
+	.Mouse/x DEI2 .Mouse/y DEI2
+	( ) src/hit
+	( ) dst/hit
+	( ) asm/hit POP2 POP2 BRK
+
+@meta $1
+	( name ) "Drif 0a
+	( desc ) "Uxntal 20 "Assembler 0a
+	( auth ) "By 20 "Devine 20 "Lu 20 "Linvega 0a
+	( date ) "12 20 "May 20 "2025 $2
+
+(
+@|src )
+
+@src/on-console ( -> )
+	[ LIT2 02 -Console/type ] DEI LTH ?{ .Console/read DEI !/on-push }
+	dst/<trap>
+	BRK
+
+@src/on-mouse ( -> )
+	cursor/<update-trap>
+	.Mouse/state DEI ?on-mouse/check-hit
+	BRK
+
+@src/on-button ( -> )
+	.Controller/key DEI
+	( >> )
+
+@src/on-push ( c -> )
+	DUP #08 EQU ?/on-pop
+	DUP #09 EQU ?/on-tab
+	DUP #0d EQU ?/on-done
+	DUP #1b EQU ?/on-esc
+	DUP #1f GTH ?{ POP BRK }
+	[ LIT2 -&cap &ptr -&buf ]
+	( clamp ) NEQk ?{ POP POP2 BRK }
+	INCk ,&ptr STR
+	NIP STZ
+	/<validate>
+	BRK
+
+@src/on-tab ( c -> )
+	( >> )
+
+@src/on-done ( c -> )
+	POP dst/<trap>
+	BRK
+
+@src/on-esc ( c -> )
+	POP asm/<focus>
+	/<draw>
+	BRK
+
+@src/on-pop ( c -> )
+	POP #00 [ LIT2 -&buf _&ptr ] LDR
+	( clamp ) NEQk ?{ POP2 BRK }
+	#01 SUB DUP ,&ptr STR
+	NIP STZ
+	/<validate>
+	BRK
+
+@src/inactive ( -- f )
+	;&on-mouse .Mouse/vector DEI2 NEQ2 JMP2r
+
+@src/hit ( x* y* -- x* y* )
+	DUP2 ,&y LDR2 #0014 ADD2 SUB2 #0014 GTH2 ?{
+		OVR2 ,&x LDR2 #0006 ADD2 SUB2 #00f4 GTH2 ?{ /<trap> } }
+	JMP2r
+
+@src/<trap> ( -- )
+	/inactive ?{ JMP2r }
+	;&on-console .Console/vector DEO2
+	;&on-mouse .Mouse/vector DEO2
+	;&on-button .Controller/vector DEO2 !<redraw>
+
+@src/<validate> ( -- )
+	asm/<validate>
+	( >> )
+
+@src/<draw> ( -- )
+	[ LIT2 &x 0008 ] .Screen/x DEO2
+	[ LIT2 &y 001c ] .Screen/y DEO2
+	/inactive ?{
+		;&buf ;&label #01 field/<draw-color>
+		[ LIT "| ] #01 !chicago/<draw-char-color> }
+	.&buf ;&ptr LDA EQU ?{ ;&buf ;&label #01 !field/<draw-color> }
+	;&placeholder ;&label #02 !field/<draw-color>
+
+	&placeholder "source.tal $1
+	&label "Tal 20 "Source 20 "File: $1
+
+(
+@|dst )
+
+@dst/on-console ( -> )
+	[ LIT2 02 -Console/type ] DEI LTH ?{ .Console/read DEI !/on-push }
+	asm/<trap>
+	BRK
+
+@dst/on-mouse ( -> )
+	cursor/<update-trap>
+	.Mouse/state DEI ?on-mouse/check-hit
+	BRK
+
+@dst/on-button ( -> )
+	.Controller/key DEI
+	( >> )
+
+@dst/on-push ( c -> )
+	DUP #0d EQU ?/on-done
+	DUP #08 EQU ?/on-pop
+	DUP #09 EQU ?/on-tab
+	DUP #1b EQU ?/on-esc
+	DUP #1f GTH ?{ POP BRK }
+	[ LIT2 -&cap &ptr -&buf ]
+	( clamp ) NEQk ?{ POP POP2 BRK }
+	INCk ,&ptr STR
+	NIP STZ
+	/<validate>
+	BRK
+
+@dst/on-tab ( c -> )
+	POP src/<trap>
+	BRK
+
+@dst/on-done ( c -> )
+	POP asm/<trap>
+	BRK
+
+@dst/on-esc ( c -> )
+	POP asm/<focus>
+	/<draw>
+	BRK
+
+@dst/on-pop ( c -> )
+	POP #00 [ LIT2 -&buf _&ptr ] LDR
+	( clamp ) NEQk ?{ POP2 BRK }
+	#01 SUB DUP ,&ptr STR
+	NIP STZ
+	/<validate>
+	BRK
+
+@dst/inactive ( -- f )
+	;&on-mouse .Mouse/vector DEI2 NEQ2 JMP2r
+
+@dst/hit ( x* y* -- x* y* )
+	DUP2 ,&y LDR2 #0014 ADD2 SUB2 #0014 GTH2 ?{
+		OVR2 ,&x LDR2 #0006 ADD2 SUB2 #00f4 GTH2 ?{ /<trap> } }
+	JMP2r
+
+@dst/<trap> ( -- )
+	/inactive ?{ JMP2r }
+	;&on-console .Console/vector DEO2
+	;&on-mouse .Mouse/vector DEO2
+	;&on-button .Controller/vector DEO2 !<redraw>
+
+@dst/<validate> ( -- )
+	asm/<validate>
+	( >> )
+
+@dst/<draw> ( -- )
+	[ LIT2 &x 0008 ] .Screen/x DEO2
+	[ LIT2 &y 0052 ] .Screen/y DEO2
+	/inactive ?{
+		;&buf ;&label #01 field/<draw-color>
+		[ LIT "| ] #01 !chicago/<draw-char-color> }
+	.&buf ;&ptr LDA EQU ?{ ;&buf ;&label #01 !field/<draw-color> }
+	;&placeholder ;&label #02 !field/<draw-color>
+
+	&placeholder "result.rom $1
+	&label "Rom 20 "Output 20 "File: $1
+
+(
+@|assemble )
+
+@asm/<focus> ( -- )
+	;&on-mouse .Mouse/vector DEO2
+	;&on-button .Controller/vector DEO2
+	JMP2r
+
+@asm/<trap> ( -- )
+	/inactive ?{ JMP2r }
+	;&state LDA #02 AND ?{ JMP2r }
+	/<focus>
+	( | Let's go! )
+	<redraw> !/<press>
+
+@asm/<validate> ( -- )
+	( src ) [ LIT2 00 -src/buf ] LDZ NEQ
+	( dst ) [ LIT2 00 -dst/buf ] LDZ NEQ AND #10 SFT
+	( >> )
+
+@asm/<set-state> ( state -- )
+	DUP ,&state LDR NEQ ?{ POP JMP2r }
+	,&state STR
+	( >> )
+
+@asm/<draw> ( -- )
+	[ LIT2 &x 0040 ] .Screen/x DEO2
+	[ LIT2 &y 0088 ] .Screen/y DEO2
+	;&label [ LIT &state $1 ] !button/<draw>
+
+	&label "Assemble $1
+
+@asm/inactive ( -- f )
+	;&on-mouse .Mouse/vector DEI2 NEQ2 JMP2r
+
+@asm/on-button ( -> )
+	[ LIT2 0d -Controller/key ] DEI NEQ ?{ /<press> }
+	BRK
+
+@asm/hit ( x* y* -- x* y* )
+	DUP2 ,&y LDR2 #0004 ADD2 SUB2 #0014 GTH2 ?{
+		OVR2 ,&x LDR2 #0006 ADD2 SUB2 #0088 GTH2 ?{ /<trap> } }
+	JMP2r
+
+@asm/<press> ( -- )
+	( src ) [ LIT2 00 -src/buf ] LDZ NEQ
+	( dst ) [ LIT2 00 -dst/buf ] LDZ NEQ AND #10 SFT ?{ JMP2r }
+	#03 /<set-state>
+	[ LIT2 f0 _&f ] STR
+	;&on-frame .Screen/vector DEO2 !<assemble>
+
+@asm/on-frame ( -> )
+	LIT &f f0 INCk ,&f STR
+	?{ #0000 .Screen/vector DEO2
+		/<validate> }
+	BRK
+
+@asm/on-mouse ( -> )
+	cursor/<update-trap>
+	[ LIT2 &last $1 -Mouse/state ] DEI DUP ,&last STR
+	( | handlers )
+	DUP2 #0001 EQU2 ?&on-down
+	DUP2 #0100 EQU2 ?&on-up
+	DUP2 #0000 EQU2 ?&on-hover
+	POP2 BRK
+
+	&on-down ( states* -> )
+	POP2 ;&state LDA #02 AND #01 ORA /<set-state>
+	BRK
+
+	&on-up ( states* -> )
+	POP2 ;&state LDA #02 AND /<set-state>
+	BRK
+
+	&on-hover ( states* -> )
+	POP2 cursor/<refocus>
+	BRK
+
+(
+@|res )
+
+@res/<draw> ( -- )
+	#0000 .Screen/x DEO2
+	#00b8 .Screen/y DEO2
+	[ LIT2 83 -Screen/pixel ] DEO
+	#00b0 .Screen/y DEO2
+	#81d0 ;&frilhor-chr #01 <draw-times>
+	( | draw )
+	#0008 .Screen/x DEO2
+	#00bc .Screen/y DEO2
+	[ LIT2 15 -Screen/auto ] DEO
+	;&buf
+	&>w
+		LDAk DUP ?{ POP POP2 JMP2r }
+		DUP #0a NEQ ?{
+			POP #0008 .Screen/x DEO2
+			.Screen/y DEI2k #0010 ADD2 ROT DEO2
+			INC2 !&>w }
+	chicago/<draw-char>
+	INC2 !&>w
+
+@res/<push> ( c -- )
+	#00 [ LIT2 &ptr =&buf ] INC2k ,&ptr STR2
+	STA2
+	JMP2r
+
+	&frilhor-chr [ 0000 83c7 ffff ffff 0000 0083 c7ff ffff ]
+	&buf "Ready. $100 &cap $1
+
+(
+@|builtins )
+
+@<assemble> ( -- )
+	( | initialize )
+	;lambda/mem #ffff ;lambda/mem SUB2 <mclr>
+	;lambda/mem ;lambda/ptr STA2
+	;refs/mem ;refs/ptr STA2
+	;macros/mem ;macros/ptr STA2
+	;syms/mem ;syms/ptr STA2
+	#0100 ;rom/head STA2
+	( | text )
+	;res/buf ;res/ptr STA2
+	( | go )
+	;src/buf <handle-file>
+	assembly/<resolve>
+	#000f DEO !<resize>
+
+@err/<pchr> ( c -- )
+	!res/<push>
+
+@runes/concat INC2
+	( >> )
+
+@<handle-file> ( f* -- )
+	.File/name DEO2
+	#0001 .File/length DEO2
+	token/<new>
+	#0000
+	&>s
+		.System/state DEI ?&end
+		;&c .File/read DEO2
+		.File/success-lb DEI ?{
+			ORAk ?{ ;dict/invalid ;src/buf ;dict/file err/<generic> }
+			&end ( i* -- )
+			POP2 JMP2r }
+		INC2 [ LIT &c $1 ] token/<push-byte> !&>s
+
+@rom/<emit> ( length* -- )
+	;dict/assembled err/<pstr>
+	#20 err/<pchr>
+	;dst/buf err/<pstr>
+	;dict/in err/<pstr>
+	[ LIT2 &length 0100 ] DUP2 #0100 SUB2 err/<pdec>
+	;dict/bytes err/<pstr>
+	( | write )
+	;dst/buf .File/name DEO2
+	#0100 SUB2 .File/length DEO2
+	;&output .File/write DEO2
+	JMP2r
+
+@<resize> ( -- )
+	#0110 #00c4 ;res/buf scln #40 SFT2 ADD2 window/<set-size>
+	( >> )
+
+@<redraw-all> ( -- )
+	header/<draw>
+	( >> )
+
+@<redraw> ( -- )
+	src/<draw>
+	dst/<draw>
+	asm/<draw> !res/<draw>
+
+@next-glyph ( addr* -- addr* )
+	INC2 LDAk
+	( utf8 ) #06 SFT #02 EQU ?next-glyph
+	JMP2r
+
+@header/<draw-title> ( -- )
+	.Screen/width DEI2 #01 SFT2 .Screen/x DEO2
+	#0001 .Screen/y DEO2
+	#09 ;chicago/color STA
+	[ LIT2 15 -Screen/auto ] DEO
+	.Screen/x DEI2 ;dict/uxnasm chicago/get-str-width #01 SFT2 SUB2 .Screen/x DEO2
+	#20 chicago/<draw-char>
+	;dict/uxnasm chicago/<draw-left>
+	#20 chicago/<draw-char>
+	( | clip )
+	.Screen/y DEI2k #0001 SUB2 ROT DEO2
+	;header/bg-chr .Screen/addr DEO2k [ LIT2r 81 -Screen/sprite ] DEOkr
+	DEO2
+	DEOr
+	JMP2r
+
+(
+@|GUIs )
+
+@field/<draw-color> ( src* label* color -- )
+	STH
+	[ LITr -Screen/x ] DEI2r #01 chicago/<draw-left-color>
+	[ LITr -Screen/x ] DEO2r
+	.Screen/y DEI2k #0010 ADD2 ROT DEO2
+	( | frame )
+	[ LIT2 35 -Screen/auto ] DEO
+	;&edge-icn .Screen/addr DEO2
+	[ LIT2 01 -Screen/sprite ] DEO
+	#01e2 ;&core-icn #35 <draw-times-addr>
+	;&edge-icn .Screen/addr DEO2
+	[ LIT2 11 -Screen/sprite ] DEO
+	( | content )
+	.Screen/x DEI2k #00eb SUB2 ROT DEO2
+	.Screen/y DEI2k #0008 ADD2 ROT DEO2
+	STHr !chicago/<draw-left-color>
+
+@field/edge-icn [
+	0000 0000 7f40 4040 4040 4040 4040 4040
+	4040 4040 4040 4040 4040 407f 0000 0000 ]
+	&core-icn [
+	0000 0000 ff00 0000 0000 0000 0000 0000
+	0000 0000 0000 0000 0000 00ff 0000 0000 ]
+
+@button/<draw> ( name* state -- )
+	STHk #01 AND #00 SWP #50 SFT2 STH2
+	[ LIT2 35 -Screen/auto ] DEO
+	;&edge-chr STH2kr ADD2 .Screen/addr DEO2
+	[ LIT2 01 -Screen/sprite ] DEO
+	#01f0 ;&core-chr STH2kr ADD2 #35 <draw-times-addr>
+	;&edge-chr STH2r ADD2 .Screen/addr DEO2
+	[ LIT2 11 -Screen/sprite ] DEO
+	( | content )
+	.Screen/y DEI2k #0008 ADD2 ROT DEO2
+	.Screen/x DEI2 #0038 SUB2 DUP2 .Screen/x DEO2
+	SWP2 #05 chicago/<draw-center-color>
+	( | hash )
+	#0040 SUB2 .Screen/x DEO2
+	STHr #02 AND ?{ #00f0 ;&hash-icn #11 !<draw-times-addr> }
+	JMP2r
+
+	&hash-icn [ aa55 aa55 aa55 aa55 ]
+
+@button/edge-chr [
+	0000 0000 030c 1126 2848 5050 5050 5050
+	5050 5050 5050 4828 2611 0c03 0000 0000
+	0000 0000 030c 1020 2040 4040 4040 4040
+	4040 4040 4040 4020 2010 0c03 0000 0000 ]
+	&core-chr [
+	0000 0000 ff00 ff00 0000 0000 0000 0000
+	0000 0000 0000 0000 00ff 00ff 0000 0000
+	0000 0000 ff00 0000 0000 0000 0000 0000
+	0000 0000 0000 0000 0000 00ff 0000 0000 ]
+
+(
+@|misc )
+
+@<phex> ( short* -: )
+	SWP /b
+	&b ( byte -: )
+	DUP #04 SFT /c
+	&c ( byte -: )
+	#0f AND DUP #09 GTH #27 MUL ADD [ LIT "0 ] ADD #18 DEO
+	JMP2r
+
+@<mclr> ( src* len* -- )
+	,&length STR2
+	,&addr STR2
+	;&mmu .System/expansion DEO2
+	JMP2r
+	&mmu 00 &length $2 0000 &addr $2 00
+
+@scln ( str* -- lines* )
+	[ LIT2r 0000 ]
+	&>l
+		LDAk DUP ?{ POP POP2 STH2r JMP2r }
+		#0a NEQ ?{ INC2r }
+		INC2 !&>l
+
+@dict/uxnasm "Uxntal 20 "Assembler $1
+	&file "File $1
+
+~src/drif.util.tal
+

@@ -1,0 +1,54 @@
+(
+    when expecting two arguments
+    usage: uxncli io.rom argument1 argument2 )
+
+|10 @Console &vector $2 &read $1 &pad $5 &write $1 &err $1
+
+|0000
+
+	@src $30
+	@dst $30
+
+|0100
+
+	;await-src .Console/vector DEO2
+
+BRK
+
+@await-src ( -> ) .Console/read DEI .src ;skey JSR2 ,&next JCN BRK
+    &next ;await-dst .Console/vector DEO2 BRK
+
+@await-dst ( -> ) .Console/read DEI .dst ;skey JSR2 ,&done JCN BRK
+    &done ;on-ready JSR2 BRK
+
+@on-ready ( -> )
+
+    ( stop listening )
+    #0000 .Console/vector DEO2
+
+    ( print two arguments )
+    ;&src-txt ;pstr JSR2 ;src ;pstr JSR2 #0a18 DEO
+    ;&dst-txt ;pstr JSR2 ;dst ;pstr JSR2 #0a18 DEO
+
+    ( halt )
+    #010f DEO
+
+JMP2r
+    &src-txt "src: 20 $1
+    &dst-txt "dst: 20 $1
+
+@skey ( key buf -- validation )
+
+	OVR #08 EQU ,&erase JCN
+	OVR #21 LTH ,&eval JCN
+	#00 SWP ;sput JSR2
+	#00
+
+JMP2r
+	&erase NIP #00 SWP ;spop JSR2 #00 JMP2r
+	&eval POP2 #01 JMP2r
+
+@spop ( str* -- ) LDAk ,&n JCN POP2 JMP2r &n ,scap JSR #0001 SUB2 #00 ROT ROT STA JMP2r
+@pstr ( str* -- ) &w LDAk #18 DEO INC2 LDAk ,&w JCN POP2 JMP2r
+@scap ( str* -- end* ) LDAk #00 NEQ JMP JMP2r &w INC2 LDAk ,&w JCN JMP2r
+@sput ( chr str* -- ) ,scap JSR INC2k #00 ROT ROT STA STA JMP2r

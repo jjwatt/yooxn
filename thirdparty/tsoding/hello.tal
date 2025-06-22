@@ -1,0 +1,22 @@
+|00 @System     &vector $2 &wst      $1 &rst    $1 &eaddr  $2 &ecode  $1 &pad     $1 &r       $2 &g      $2 &b     $2 &debug  $1 &halt $1
+|10 @Console    &vector $2 &read     $1 &pad    $5 &write  $1 &error  $1
+|20 @Screen     &vector $2 &width    $2 &height $2 &auto   $1 &pad    $1 &x
+
+|0100
+
+@on-reset ( -> )
+	#00 &again DUP #0a LTH #01 EOR ?{
+		;hello-world print-text
+		INC
+		!&again
+	}
+BRK
+
+@print-text
+	&while
+		LDAk .Console/write DEO
+		INC2 LDAk ?&while
+	POP2
+JMP2r
+
+@hello-world "Hello 20 "World 0a 00

@@ -1,0 +1,410 @@
+( Opcode Tester )
+
+( Requirements:
+	EQU/EQU2 should put #00 or #01 on the stack
+	#18 DEO should output ascii character to console )
+
+|0000
+
+	@zeropage &byte $1 &short $2
+
+|0100
+
+(
+@|Logic )
+
+@op-equ
+
+	LIT "E #18 DEO LIT "Q #18 DEO LIT "U #18 DEO #2018 DEO
+
+	#f8 #f8 EQU [ #01 ] EQU #30 ADD #18 DEO
+	#01 #01 EQU [ #01 ] EQU #30 ADD #18 DEO
+	#f8 #01 EQU [ #00 ] EQU #30 ADD #18 DEO
+	#00 #ff EQU [ #00 ] EQU #30 ADD #18 DEO
+	#2018 DEO
+	#f801 #f801 EQU2 [ #01 ] EQU #30 ADD #18 DEO
+	#01f8 #01f8 EQU2 [ #01 ] EQU #30 ADD #18 DEO
+	#f801 #01f8 EQU2 [ #00 ] EQU #30 ADD #18 DEO
+	#01f8 #f801 EQU2 [ #00 ] EQU #30 ADD #18 DEO
+	#0a18 DEO
+
+@op-neq
+
+	LIT "N #18 DEO LIT "E #18 DEO LIT "Q #18 DEO #2018 DEO
+
+	#f8 #f8 NEQ [ #00 ] EQU #30 ADD #18 DEO
+	#01 #01 NEQ [ #00 ] EQU #30 ADD #18 DEO
+	#f8 #01 NEQ [ #01 ] EQU #30 ADD #18 DEO
+	#01 #f8 NEQ [ #01 ] EQU #30 ADD #18 DEO
+	#2018 DEO
+	#f801 #f801 NEQ2 [ #00 ] EQU #30 ADD #18 DEO
+	#01f8 #01f8 NEQ2 [ #00 ] EQU #30 ADD #18 DEO
+	#f801 #01f8 NEQ2 [ #01 ] EQU #30 ADD #18 DEO
+	#01f8 #f801 NEQ2 [ #01 ] EQU #30 ADD #18 DEO
+	#0a18 DEO
+
+@op-gth
+
+	LIT "G #18 DEO LIT "T #18 DEO LIT "H #18 DEO #2018 DEO
+
+	#f8 #f8 GTH [ #00 ] EQU #30 ADD #18 DEO
+	#01 #01 GTH [ #00 ] EQU #30 ADD #18 DEO
+	#f8 #01 GTH [ #01 ] EQU #30 ADD #18 DEO
+	#01 #f8 GTH [ #00 ] EQU #30 ADD #18 DEO
+	#2018 DEO
+	#f801 #f801 GTH2 [ #00 ] EQU #30 ADD #18 DEO
+	#01f8 #01f8 GTH2 [ #00 ] EQU #30 ADD #18 DEO
+	#f801 #01f8 GTH2 [ #01 ] EQU #30 ADD #18 DEO
+	#01f8 #f801 GTH2 [ #00 ] EQU #30 ADD #18 DEO
+	#0a18 DEO
+
+@op-lth
+
+	LIT "L #18 DEO LIT "T #18 DEO LIT "H #18 DEO #2018 DEO
+
+	#f8 #f8 LTH [ #00 ] EQU #30 ADD #18 DEO
+	#01 #01 LTH [ #00 ] EQU #30 ADD #18 DEO
+	#f8 #01 LTH [ #00 ] EQU #30 ADD #18 DEO
+	#01 #ff LTH [ #01 ] EQU #30 ADD #18 DEO
+	#2018 DEO
+	#f801 #f801 LTH2 [ #00 ] EQU #30 ADD #18 DEO
+	#01f8 #01f8 LTH2 [ #00 ] EQU #30 ADD #18 DEO
+	#f801 #01f8 LTH2 [ #00 ] EQU #30 ADD #18 DEO
+	#01f8 #f801 LTH2 [ #01 ] EQU #30 ADD #18 DEO
+	#0a18 DEO #0a18 DEO
+
+(
+@|Arithmetic )
+
+@op-add
+
+	LIT "A #18 DEO LIT "D #18 DEO LIT "D #18 DEO #2018 DEO
+
+	#ff #00 ADD [ #ff ] EQU #30 ADD #18 DEO
+	#01 #ff ADD [ #00 ] EQU #30 ADD #18 DEO
+	#ff #ff ADD [ #fe ] EQU #30 ADD #18 DEO
+	#fe #ff ADD [ #fd ] EQU #30 ADD #18 DEO
+	#2018 DEO
+	#ffff #0000 ADD2 [ #ffff ] EQU2 #30 ADD #18 DEO
+	#0001 #ffff ADD2 [ #0000 ] EQU2 #30 ADD #18 DEO
+	#ffff #ffff ADD2 [ #fffe ] EQU2 #30 ADD #18 DEO
+	#fffe #ffff ADD2 [ #fffd ] EQU2 #30 ADD #18 DEO
+	#2018 DEO
+	#0a18 DEO
+
+@op-sub
+
+	LIT "S #18 DEO LIT "U #18 DEO LIT "B #18 DEO #2018 DEO
+
+	#ff #00 SUB [ #ff ] EQU #30 ADD #18 DEO
+	#01 #ff SUB [ #02 ] EQU #30 ADD #18 DEO
+	#ff #ff SUB [ #00 ] EQU #30 ADD #18 DEO
+	#fe #ff SUB [ #ff ] EQU #30 ADD #18 DEO
+	#2018 DEO
+	#ffff #0000 SUB2 [ #ffff ] EQU2 #30 ADD #18 DEO
+	#0001 #ffff SUB2 [ #0002 ] EQU2 #30 ADD #18 DEO
+	#ffff #ffff SUB2 [ #0000 ] EQU2 #30 ADD #18 DEO
+	#fffe #ffff SUB2 [ #ffff ] EQU2 #30 ADD #18 DEO
+	#2018 DEO
+	#0a18 DEO
+
+@op-mul
+
+	LIT "M #18 DEO LIT "U #18 DEO LIT "L #18 DEO #2018 DEO
+
+	#00 #01 MUL [ #00 ] EQU #30 ADD #18 DEO
+	#3f #e7 MUL [ #d9 ] EQU #30 ADD #18 DEO
+	#37 #3f MUL [ #89 ] EQU #30 ADD #18 DEO
+	#10 #02 MUL [ #20 ] EQU #30 ADD #18 DEO
+	#2018 DEO
+	#1000 #0003 MUL2 [ #3000 ] EQU2 #30 ADD #18 DEO
+	#abcd #1234 MUL2 [ #4fa4 ] EQU2 #30 ADD #18 DEO
+	#8000 #0200 MUL2 [ #0000 ] EQU2 #30 ADD #18 DEO
+	#2222 #0003 MUL2 [ #6666 ] EQU2 #30 ADD #18 DEO
+	#0a18 DEO
+
+@op-div
+
+	LIT "D #18 DEO LIT "I #18 DEO LIT "V #18 DEO #2018 DEO
+
+	#10 #02 DIV [ #08 ] EQU #30 ADD #18 DEO
+	#20 #20 DIV [ #01 ] EQU #30 ADD #18 DEO
+	#34 #01 DIV [ #34 ] EQU #30 ADD #18 DEO
+	#02 #ef DIV [ #00 ] EQU #30 ADD #18 DEO
+	#2018 DEO
+	#1000 #0040 DIV2 [ #0040 ] EQU2 #30 ADD #18 DEO
+	#abcd #1234 DIV2 [ #0009 ] EQU2 #30 ADD #18 DEO
+	#8000 #0200 DIV2 [ #0040 ] EQU2 #30 ADD #18 DEO
+	#2222 #0003 DIV2 [ #0b60 ] EQU2 #30 ADD #18 DEO
+	#0a18 DEO #0a18 DEO
+
+(
+@|Stack )
+
+@op-inc
+
+	LIT "I #18 DEO LIT "N #18 DEO LIT "C #18 DEO #2018 DEO
+
+	#01 INC [ #02 ] EQU #30 ADD #18 DEO
+	#ff INC [ #00 ] EQU #30 ADD #18 DEO
+	#fe INC [ #ff ] EQU #30 ADD #18 DEO
+	#00 INC [ #01 ] EQU #30 ADD #18 DEO
+	#2018 DEO
+	#0001 INC2 [ #0002 ] EQU2 #30 ADD #18 DEO
+	#ffff INC2 [ #0000 ] EQU2 #30 ADD #18 DEO
+	#fffe INC2 [ #ffff ] EQU2 #30 ADD #18 DEO
+	#0000 INC2 [ #0001 ] EQU2 #30 ADD #18 DEO
+	#0a18 DEO
+
+@op-pop
+
+	LIT "P #18 DEO LIT "O #18 DEO LIT "P #18 DEO #2018 DEO
+
+	#0a #0b POP [ #0a ] EQU #30 ADD #18 DEO
+	#0a #0b #0c POP POP [ #0a ] EQU #30 ADD #18 DEO
+	#0a #0b #0c ADD POP [ #0a ] EQU #30 ADD #18 DEO
+	#0a #0b #0c POP ADD [ #15 ] EQU #30 ADD #18 DEO
+	#2018 DEO
+	#0a0b #0c0d POP2 [ #0a0b ] EQU2 #30 ADD #18 DEO
+	#0a0b #0c0d #0e0f POP2 POP2 [ #0a0b ] EQU2 #30 ADD #18 DEO
+	#0a0b #0c0d #0e0f ADD2 POP2 [ #0a0b ] EQU2 #30 ADD #18 DEO
+	#0a0b #0c0d #0e0f POP2 ADD2 [ #1618 ] EQU2 #30 ADD #18 DEO
+	#0a18 DEO
+
+@op-dup
+
+	LIT "D #18 DEO LIT "U #18 DEO LIT "P #18 DEO #2018 DEO
+
+	#0a #0b DUP ADD ADD [ #20 ] EQU #30 ADD #18 DEO
+	#2018 DEO
+	#0a0b DUP2 ADD2 [ #1416 ] EQU2 #30 ADD #18 DEO
+	#0a18 DEO
+
+@op-nip
+
+	LIT "N #18 DEO LIT "I #18 DEO LIT "P #18 DEO #2018 DEO
+
+	#12 #34 #56 NIP ADD [ #68 ] EQU #30 ADD #18 DEO
+	#12 #34 #56 NIPk ADD2 ADD [ #f2 ] EQU #30 ADD #18 DEO
+	#2018 DEO
+	#1234 #5678 #9abc NIP2 ADD2 [ #acf0 ] EQU2 #30 ADD #18 DEO
+	#1234 #5678 #9abc NIP2k ADD2 ADD2 ADD2 [ #9e24 ] EQU2 #30 ADD #18 DEO
+	#0a18 DEO
+
+@op-swp
+
+	LIT "S #18 DEO LIT "W #18 DEO LIT "P #18 DEO #2018 DEO
+
+	#02 #10 SWP DIV [ #08 ] EQU #30 ADD #18 DEO
+	#2018 DEO
+	#0a0b #0c0d SWP2 NIP2 [ #0a0b ] EQU2 #30 ADD #18 DEO
+	#0a18 DEO
+
+@op-ovr
+
+	LIT "O #18 DEO LIT "V #18 DEO LIT "R #18 DEO #2018 DEO
+
+	#02 #10 OVR DIV ADD [ #0a ] EQU #30 ADD #18 DEO
+	#2018 DEO
+	#0a0b #0c0d OVR2 NIP2 ADD2 [ #1416 ] EQU2 #30 ADD #18 DEO
+	#0a18 DEO
+
+@op-rot
+
+	LIT "R #18 DEO LIT "O #18 DEO LIT "T #18 DEO #2018 DEO
+
+	#02 #04 #10 ROT DIV ADD [ #0c ] EQU #30 ADD #18 DEO
+	#2018 DEO
+	#0a0b #0c0d #0c0f ROT2 ADD2 NIP2 [ #161a ] EQU2 #30 ADD #18 DEO
+	#0a18 DEO #0a18 DEO
+
+(
+@|Bitwise )
+
+@op-and
+
+	LIT "A #18 DEO LIT "N #18 DEO LIT "D #18 DEO #2018 DEO
+
+	#fc #3f AND [ #3c ] EQU #30 ADD #18 DEO
+	#f0 #0f AND [ #00 ] EQU #30 ADD #18 DEO
+	#ff #3c AND [ #3c ] EQU #30 ADD #18 DEO
+	#02 #03 AND [ #02 ] EQU #30 ADD #18 DEO
+	#2018 DEO
+	#f0f0 #00f0 AND2 [ #00f0 ] EQU2 #30 ADD #18 DEO
+	#aaaa #5555 AND2 [ #0000 ] EQU2 #30 ADD #18 DEO
+	#ffff #1234 AND2 [ #1234 ] EQU2 #30 ADD #18 DEO
+	#abcd #0a0c AND2 [ #0a0c ] EQU2 #30 ADD #18 DEO
+	#0a18 DEO
+
+@op-ora
+
+	LIT "O #18 DEO LIT "R #18 DEO LIT "A #18 DEO #2018 DEO
+
+	#0f #f0 ORA [ #ff ] EQU #30 ADD #18 DEO
+	#ab #cd ORA [ #ef ] EQU #30 ADD #18 DEO
+	#12 #34 ORA [ #36 ] EQU #30 ADD #18 DEO
+	#88 #10 ORA [ #98 ] EQU #30 ADD #18 DEO
+	#2018 DEO
+	#0f0f #f0f0 ORA2 [ #ffff ] EQU2 #30 ADD #18 DEO
+	#abab #cdcd ORA2 [ #efef ] EQU2 #30 ADD #18 DEO
+	#1122 #1234 ORA2 [ #1336 ] EQU2 #30 ADD #18 DEO
+	#8888 #1000 ORA2 [ #9888 ] EQU2 #30 ADD #18 DEO
+	#0a18 DEO
+
+@op-eor
+
+	LIT "E #18 DEO LIT "O #18 DEO LIT "R #18 DEO #2018 DEO
+
+	#00 #00 EOR [ #00 ] EQU #30 ADD #18 DEO
+	#ff #00 EOR [ #ff ] EQU #30 ADD #18 DEO
+	#aa #55 EOR [ #ff ] EQU #30 ADD #18 DEO
+	#ff #ff EOR [ #00 ] EQU #30 ADD #18 DEO
+	#2018 DEO
+	#ffff #ff00 EOR2 [ #00ff ] EQU2 #30 ADD #18 DEO
+	#aaaa #5555 EOR2 [ #ffff ] EQU2 #30 ADD #18 DEO
+	#1122 #1234 EOR2 [ #0316 ] EQU2 #30 ADD #18 DEO
+	#8888 #1000 EOR2 [ #9888 ] EQU2 #30 ADD #18 DEO
+	#0a18 DEO
+
+@op-sft
+
+	LIT "S #18 DEO LIT "F #18 DEO LIT "T #18 DEO #2018 DEO
+
+	#ff #08 SFT [ #00 ] EQU #30 ADD #18 DEO
+	#ff #e0 SFT [ #00 ] EQU #30 ADD #18 DEO
+	#ff #11 SFT [ #fe ] EQU #30 ADD #18 DEO
+	#ff #12 SFT [ #7e ] EQU #30 ADD #18 DEO
+	#2018 DEO
+	#ffff #01 SFT2 [ #7fff ] EQU2 #30 ADD #18 DEO
+	#ffff #70 SFT2 [ #ff80 ] EQU2 #30 ADD #18 DEO
+	#ffff #7e SFT2 [ #0180 ] EQU2 #30 ADD #18 DEO
+	#ffff #e3 SFT2 [ #c000 ] EQU2 #30 ADD #18 DEO
+	#0a18 DEO #0a18 DEO
+
+(
+@|Memory )
+
+@op-stz
+
+	LIT "S #18 DEO LIT "T #18 DEO LIT "Z #18 DEO #2018 DEO
+
+	#ab .zeropage/byte STZ .zeropage/byte LDZ [ #ab ] EQU #30 ADD #18 DEO
+	#cd .zeropage/byte STZ .zeropage/byte LDZ [ #cd ] EQU #30 ADD #18 DEO
+	#2018 DEO
+	#1234 .zeropage/short STZ2 .zeropage/short LDZ2 [ #1234 ] EQU2 #30 ADD #18 DEO
+	#5678 .zeropage/short STZ2 .zeropage/short LDZ2 [ #5678 ] EQU2 #30 ADD #18 DEO
+	#0a18 DEO
+
+@op-str
+
+	LIT "S #18 DEO LIT "T #18 DEO LIT "R #18 DEO #2018 DEO
+
+	[ LIT &before1 $1 ] POP
+	[ LIT2 &before2 $2 ] POP2
+	#22 ,&before1 STR ,&before1 LDR [ #22 ] EQU #30 ADD #18 DEO
+	#ef ,&after1 STR ,&after1 LDR [ #ef ] EQU #30 ADD #18 DEO
+	#2018 DEO
+	#1234 ,&before2 STR2 ,&before2 LDR2 [ #1234 ] EQU2 #30 ADD #18 DEO
+	#5678 ,&after2 STR2 ,&after2 LDR2 [ #5678 ] EQU2 #30 ADD #18 DEO
+	[ LIT &after1 $1 ] POP
+	[ LIT2 &after2 $2 ] POP2
+	#0a18 DEO
+
+@op-sta
+
+	LIT "S #18 DEO LIT "T #18 DEO LIT "A #18 DEO #2018 DEO
+
+	#34 ;absolute/byte STA ;absolute/byte LDA [ #34 ] EQU #30 ADD #18 DEO
+	#56 ;absolute/byte STA ;absolute/byte LDA [ #56 ] EQU #30 ADD #18 DEO
+	#2018 DEO
+	#1234 ;absolute/short STA2 ;absolute/short LDA2 [ #1234 ] EQU2 #30 ADD #18 DEO
+	#5678 ;absolute/short STA2 ;absolute/short LDA2 [ #5678 ] EQU2 #30 ADD #18 DEO
+	#0a18 DEO
+
+@op-deo
+
+	LIT "D #18 DEO LIT "E #18 DEO LIT "O #18 DEO #2018 DEO
+
+	LIT "1 #18 DEO
+	LIT "1 #18 DEO
+	#0a18 DEO #0a18 DEO
+
+(
+@|Branching )
+
+@op-jmp
+
+	LIT "J #18 DEO LIT "M #18 DEO LIT "P #18 DEO #2018 DEO
+
+	#12 #34 ,&reljmp JMP SWP &reljmp POP [ #12 ] EQU #30 ADD #18 DEO
+	#2018 DEO
+	#56 #78 ;&absjmp JMP2 SWP &absjmp POP [ #56 ] EQU #30 ADD #18 DEO
+	#0a18 DEO
+
+@op-jcn
+
+	LIT "J #18 DEO LIT "C #18 DEO LIT "N #18 DEO #2018 DEO
+
+	#23 #01 ,&reljcn-y JCN INC &reljcn-y [ #23 ] EQU #30 ADD #18 DEO
+	#23 #00 ,&reljcn-n JCN INC &reljcn-n [ #24 ] EQU #30 ADD #18 DEO
+	#2018 DEO
+	#23 #01 ;&absjcn-y JCN2 INC &absjcn-y [ #23 ] EQU #30 ADD #18 DEO
+	#23 #00 ;&absjcn-n JCN2 INC &absjcn-n [ #24 ] EQU #30 ADD #18 DEO
+	#0a18 DEO
+
+@op-jsr ( requires return mode )
+
+	LIT "J #18 DEO LIT "S #18 DEO LIT "R #18 DEO #2018 DEO
+	#12 #34 ;routine JSR2 [ #46 ] EQU #30 ADD #18 DEO
+	#0a18 DEO
+
+@op-sth
+
+	LIT "S #18 DEO LIT "T #18 DEO LIT "H #18 DEO #2018 DEO
+
+	#0a STH #0b STH ADDr STHr [ #15 ] EQU #30 ADD #18 DEO
+	#2018 DEO
+	#000a STH2 #000b STH2 ADD2r STH2r [ #0015 ] EQU2 #30 ADD #18 DEO
+	#0a18 DEO #0a18 DEO
+
+(
+@|Immediate )
+
+@op-jci
+
+	LIT "J #18 DEO LIT "C #18 DEO LIT "I #18 DEO #2018 DEO
+	#01 ?&skip #3018 DEO &skip #3118 DEO
+	#0a18 DEO
+
+@op-jmi
+
+	LIT "J #18 DEO LIT "M #18 DEO LIT "I #18 DEO #2018 DEO
+	!&skip #3018 DEO &skip #3118 DEO
+	#0a18 DEO
+
+@op-jsi
+
+	LIT "J #18 DEO LIT "S #18 DEO LIT "I #18 DEO #2018 DEO
+	#02 #04 routine #06 EQU #30 ADD #18 DEO
+	#0a18 DEO
+
+(
+@|Modes )
+
+	LIT "K #18 DEO LIT "E #18 DEO LIT "E #18 DEO LIT "P #18 DEO #2018 DEO
+	#12 #34 ADDk ADD ADD [ #8c ] EQU #30 ADD #18 DEO
+	#0a18 DEO
+
+	#010e DEO
+	#010f DEO
+
+BRK
+
+@routine ( a b -- c )
+
+	ADD
+
+JMP2r
+
+@absolute
+	&byte $1 &short $2

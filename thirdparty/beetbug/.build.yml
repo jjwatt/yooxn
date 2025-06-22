@@ -1,0 +1,21 @@
+image: debian/stable
+oauth: pages.sr.ht/PAGES:RW
+environment:
+    SITE: rabbits.srht.site/beetbug
+sources:
+    - https://git.sr.ht/~rabbits/beetbug
+tasks:
+    - prepare: |
+        curl -fsS https://rabbits.srht.site/uxn/uxn-lin64.tar.gz | tar -zx
+    - build: |
+        cd beetbug
+        ../uxn/uxnasm src/beetbug.tal ../beetbug.rom
+    - upload: |
+        tar -czf out.tar.gz beetbug.rom
+        acurl() {
+            set +x
+            curl -H "Authorization: Bearer ${OAUTH2_TOKEN}" "${@}"
+            set -x
+        }
+        acurl -fsS "https://pages.sr.ht/publish/${SITE}" -Fcontent=@out.tar.gz
+        acurl -fsS "https://pages.sr.ht/publish/${SITE}" -Fcontent=@out.tar.gz -Fprotocol=GEMINI

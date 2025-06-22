@@ -1,0 +1,236 @@
+( uxn ordinator ordinator )
+
+|00 @System &vector $2 &pad     $6 &r      $2 &g      $2 &b      $2 ]
+|10 @Console &vector $2 &read $1 &pad $5 &write $1 &error $1
+|20 @Screen &vector $2 &width   $2 &height $2 &pad    $2 &x      $2 &y      $2 &addr   $2 &pixel $1 &sprite $1 ]
+|a0 @File &vector $2 &success $2 &stat $2 &delete $1 &append $1 &name $2 &length $2 &read $2 &write $2
+
+|0000
+
+	@filename $40
+	@pc $2
+	@f &2 $1 &r $1 &k $1
+	@src $2
+	@dst $2
+	@err $1
+
+|0100 ( -> )
+
+	;await-src .Console/vector DEO2
+	;dict/input ;pstr JSR2
+
+BRK
+
+@await-src ( -> )
+
+	.Console/read DEI .filename ;skey JSR2
+		,on-ready JCN
+
+BRK
+
+@on-ready ( -> )
+
+	;filename .File/name DEO2
+	#8000 .File/length DEO2
+	;program/reset .File/read DEO2
+	( run )
+	#0100 .pc STZ2
+	&while
+		;step JSR2 ,&while JCN
+	#0a18 DEO
+	( error )
+	.err LDZ #00 EQU ,&no-error JCN
+		;dict/error ;pstr JSR2 #0a18 DEO
+		&no-error
+	( exit )
+	#0101 #0e DEO2
+
+BRK
+
+@step ( -- continue )
+
+	( get opcode )
+	.pc LDZ2 ;program ADD2 LDA
+		( move PC )
+		.pc LDZ2k INC2 ROT STZ2
+		( exit on BRK )
+		DUP #00 EQU ,&brk JCN
+		( short mode )
+		DUP #20 AND #00 NEQ .f/2 STZ
+		( return mode )
+		DUP #40 AND #00 NEQ STHk .f/r STZ
+		;rst ;wst STHr [ JMP SWP2 ] .dst STZ2 .src STZ2
+		( keep mode )
+		DUP #80 AND #00 NEQ .f/k STZ
+		( copy pop pointer )
+		.src LDZ2 #00fe ADD2 LDAk DUP SWP2 STA2
+		( get routine )
+		#00 OVR #1f AND DUP2 ADD2 ;optbl ADD2 LDA2 JSR2
+		( check err )
+		.err LDZ ,&on-err JCN
+		&brk
+		#00 NEQ
+
+JMP2r
+	&on-err POP #00 JMP2r
+
+@send ( v* p* -- )
+
+	NIP
+	DUP #18 NEQ ,&no-console JCN
+		.f/2 LDZ ,&c16 JCN
+			DEO POP JMP2r
+			&c16 DEO2 JMP2r
+		&no-console
+	POP POP2
+
+JMP2r
+
+@receive ( p* -- )
+
+	;phex JSR2 #0a18 DEO
+
+JMP2r
+
+(
+@|primitives )
+
+@push ( v* -- ) .f/2 LDZ ,&16 JCN
+&8 ( v* -- )
+	NIP
+	&byte
+	( stack ptr* ) .src LDZ2 #00fe ADD2 STH2k
+	( err overflow ) LDA #ff EQU #10 SFT .err STZ
+	( incr ) .src LDZ2 #00 STH2kr LDA INCk STH2r STA
+	( save ) ADD2 STA
+
+JMP2r
+&16 ( v* -- ) SWP ,&byte JSR ,&byte JSR JMP2r
+
+@pop ( -- v* ) .f/2 LDZ ,&16 JCN
+&8 ( -- v* )
+	#00
+	&byte
+	.src LDZ2 #00fe ADD2 #00 .f/k LDZ ADD2 STH2k
+	( err underflow ) LDA #ff EQU .err STZ
+	( decr ) .src LDZ2 STH2kr LDA #01 SUB STH2kr STA
+	( load ) #00 STH2r LDA ADD2 LDA
+
+JMP2r
+&16 ( -- v* ) ,&byte JSR ,&byte JSR SWP JMP2r
+
+@poke ( v* a* -- ) .f/2 LDZ ,&16 JCN
+&8 ;program ADD2 STA JMP2r
+&16 ;program ADD2 STA2 JMP2r
+
+@peek ( -- v* ) .f/2 LDZ ,&16 JCN
+&8 ;program ADD2 LDA #00 SWP JMP2r
+&16 ;program ADD2 LDA2 JMP2r
+
+@warp ( a* -- ) .f/2 LDZ ,&16 JCN
+&8 NIP ,rel JSR .pc STZ2 JMP2r
+&16 .pc STZ2 JMP2r
+
+( sint8 -> sint16 ) 
+
+@rel ( a* -- ) DUP #7f GTH #ff MUL SWP .pc LDZ2 ADD2 JMP2r
+
+@devw ( v* p* -- ) OVR2 OVR2 ;send JSR2 ;dev ADD2 .f/2 LDZ ,&16 JCN
+&8 STA POP JMP2r
+&16 STA2 JMP2r
+
+@devr ( p* -- ) DUP2 ;receive JSR2 ;dev ADD2 .f/2 LDZ ,devr/16 JCN
+&8 LDA ;push JMP2
+&16 LDA2 ;push JMP2
+
+(
+@|library )
+
+@op-lit ( -- )
+
+	.pc LDZ2
+		DUP2 ;peek JSR2 ;push JSR2
+		#0001 .f/2 LDZ ADD ADD2 .pc STZ2
+
+JMP2r
+
+@op-inc ;pop JSR2 INC2 ;push JMP2
+@op-pop ;pop JSR2 POP2 JMP2r
+@op-nip ;pop JSR2 ;pop JSR2 POP2 ;push JMP2
+@op-swp ;pop JSR2 ;pop JSR2 SWP2 ;push JSR2 ;push JMP2
+@op-rot ;pop JSR2 ;pop JSR2 ;pop JSR2 ROT2 ROT2 ;push JSR2 ;push JSR2 ;push JMP2
+@op-dup ;pop JSR2 DUP2 ;push JSR2 ;push JMP2
+@op-ovr ;pop JSR2 ;pop JSR2 SWP2 OVR2 ;push JSR2 ;push JSR2 ;push JMP2
+( logic )
+@op-equ ;pop JSR2 ;pop JSR2 EQU2 ;push/byte JMP2
+@op-neq ;pop JSR2 ;pop JSR2 NEQ2 ;push/byte JMP2
+@op-gth ;pop JSR2 ;pop JSR2 SWP2 GTH2 ;push/byte JMP2
+@op-lth ;pop JSR2 ;pop JSR2 SWP2 LTH2 ;push/byte JMP2
+@op-jmp ;pop JSR2 ;warp JMP2
+@op-jcn ;pop JSR2 ;pop/8 JSR2 NIP ;warp JCN2 JMP2r
+@op-jsr ;pop JSR2 .pc LDZ2 .dst LDZ2 .src STZ2 ;push/16 JSR2 ;warp JMP2
+@op-sth ;pop JSR2 .dst LDZ2 .src STZ2 ;push JMP2
+( memory )
+@op-ldz ;pop/8 JSR2 ;peek JSR2 ;push JMP2
+@op-stz ;pop/8 JSR2 ;pop JSR2 SWP2 ;poke JMP2
+@op-ldr ;pop/8 JSR2 NIP ;rel JSR2 ;peek JSR2 ;push JMP2
+@op-str ;pop/8 JSR2 ;pop JSR2 SWP2 NIP ;rel JSR2 ;poke JMP2
+@op-lda ;pop/16 JSR2 ;peek JSR2 ;push JMP2
+@op-sta ;pop/16 JSR2 ;pop JSR2 SWP2 ;poke JMP2
+@op-dei ;pop/8 JSR2 ;devr JMP2
+@op-deo ;pop/8 JSR2 ;pop JSR2 SWP2 ;devw JMP2
+( arithmetic )
+@op-add ;pop JSR2 ;pop JSR2 ADD2 ;push JMP2
+@op-sub ;pop JSR2 ;pop JSR2 SWP2 SUB2 ;push JMP2
+@op-mul ;pop JSR2 ;pop JSR2 MUL2 ;push JMP2
+@op-div ;pop JSR2 ;pop JSR2 SWP2 DIV2 ;push JMP2
+@op-and ;pop JSR2 ;pop JSR2 AND2 ;push JMP2
+@op-ora ;pop JSR2 ;pop JSR2 ORA2 ;push JMP2
+@op-eor ;pop JSR2 ;pop JSR2 EOR2 ;push JMP2
+@op-sft ;pop/8 JSR2 ;pop JSR2 SWP2 NIP SFT2 ;push JMP2
+
+@optbl
+	=op-lit =op-inc =op-pop =op-nip =op-swp =op-rot =op-dup =op-ovr
+	=op-equ =op-neq =op-gth =op-lth =op-jmp =op-jcn =op-jsr =op-sth
+	=op-ldz =op-stz =op-ldr =op-str =op-lda =op-sta =op-dei =op-deo
+	=op-add =op-sub =op-mul =op-div =op-and =op-ora =op-eor =op-sft
+
+(
+@|utils )
+
+@pstr ( str* -- )
+
+	&w
+		LDAk #18 DEO
+		INC2 LDAk ,&w JCN
+	POP2
+
+JMP2r
+
+@phex ( short* -- )
+
+	SWP ,&b JSR
+	&b ( byte -- ) DUP #04 SFT ,&c JSR
+	&c ( char -- ) #0f AND DUP #09 GTH #27 MUL ADD #30 ADD #18 DEO
+
+JMP2r
+
+@dict
+	&input "Input(.tal): 20 $1
+	&error "Error: $1
+
+@skey ( key buf -- proc ) OVR #21 LTH ,&eval JCN #00 SWP ;sput JSR2 #00 JMP2r &eval POP2 #01 JMP2r
+@scap ( str* -- end* ) LDAk #00 NEQ JMP JMP2r &w INC2 LDAk ,&w JCN JMP2r
+@sput ( chr str* -- ) ,scap JSR STA JMP2r
+
+(
+@|system )
+
+@wst $fe &ptr $2
+@rst $fe &ptr $2
+@dev $100
+
+@program
+	&zp $100
+	&reset
+

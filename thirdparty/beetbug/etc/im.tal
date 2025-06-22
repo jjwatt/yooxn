@@ -1,0 +1,20 @@
+( testing CALL opcodes
+	Expected stack: 12 34 56 78 9a )
+
+|0100
+
+	( test JMI )
+	!jmi #ffff
+	@jmi #12
+	( test JCI )
+	#01 ?jci
+	#00 ?jci-bad
+	@jci #34
+	( test JSI )
+	jsi #78
+
+BRK
+
+@jsi ( -- ) #56 JMP2r
+@jci-bad ( -- ) #ffff BRK
+

@@ -1,0 +1,20 @@
+image: debian/stable
+packages:
+- xxd
+oauth: pages.sr.ht/PAGES:RW
+environment:
+    SITE: rabbits.srht.site/drifblim
+sources:
+    - https://git.sr.ht/~rabbits/drifblim
+tasks:
+    - assemble: |
+        cd drifblim
+        xxd -r -p etc/drifblim.rom.txt ../drifblim.rom
+    - upload: |
+        tar -czf out.tar.gz drifblim.rom
+        acurl() {
+            set +x
+            curl -H "Authorization: Bearer ${OAUTH2_TOKEN}" "${@}"
+            set -x
+        }
+        acurl -fsS "https://pages.sr.ht/publish/${SITE}" -Fcontent=@out.tar.gz

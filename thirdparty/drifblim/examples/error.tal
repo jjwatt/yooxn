@@ -1,0 +1,35 @@
+|0020 "zero-page-writing $1
+
+|0100 
+
+	( invalid paddings )
+	|abspad
+	$relpad
+	( invalid hex )
+	#vo
+	#void
+	( invalid token )
+	bad-token
+	( invalid literals )
+	#a 
+	#aaa 
+	#aaaaa
+	( invalid raws )
+	b
+	bbb
+	bbbbb
+	( duplicate labels )
+	@unique-parent
+	@unique-parent
+		&unique-children
+		&unique-children
+	( invalid labels )
+	.zeropage
+	,missing
+	;absolute
+	( invalid distance )
+	,too-far
+
+BRK
+
+$1000 @too-far

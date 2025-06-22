@@ -1,0 +1,11 @@
+.DS*
+*jpg
+*png
+*bmp
+/bin
+/etc/tests.rom
+*snarf
+*theme
+*sym
+
+

@@ -1,0 +1,29 @@
+( test file )
+
+|0100 @program
+
+	;go-far JSR2
+	;str ;print-string JSR2
+
+BRK
+
+@print-string ( str* -- )
+
+	&while
+		( send ) LDAk #18 DEO
+		( loop ) INC2 LDAk ,&while JCN
+	POP2
+
+JMP2r
+
+@str "Hello 20 "World $1
+
+|0240
+
+@go-far ( -- )
+
+	#1234
+	( breakpoint ) #010e DEO
+	POP2
+
+JMP2r

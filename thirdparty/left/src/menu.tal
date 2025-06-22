@@ -1,0 +1,138 @@
+( @|menu )
+
+@menu/on-mouse ( -> )
+	[ LIT2 00 -Mouse/state ] DEI NEQ #42 ADD cursor/<update>
+	[ LIT2 &last $1 -Mouse/state ] DEI DUP ,&last STR
+	DUP2 #0001 NEQ2 ?{ /<touch-cat> }
+	POP2 BRK
+
+@menu/on-exit-cat ( -> )
+	.Mouse/state DEI ?{ ;&on-mouse .Mouse/vector DEO2 }
+	BRK
+
+@menu/on-exit-sub ( -> )
+	.Mouse/state DEI ?{ Mouse/<update-focus> }
+	BRK
+
+@menu/on-open-cat ( -> )
+	.Mouse/state DEI ?{ ;&on-trap .Mouse/vector DEO2 }
+	BRK
+
+@menu/on-trap ( -> )
+	#43 cursor/<update-trap>
+	.Mouse/y DEI2 DUP2 #001c LTH2 ?{
+		#001c SUB2 #0018 DIV2 NIP .Mouse/state DEI ?{ /<hover-sub>
+			BRK }
+		/<touch-sub>
+		BRK }
+	POP2 .Mouse/state DEI ?{ BRK }
+	/<touch-cat>
+	BRK
+
+@menu/<touch-cat> ( -- )
+	[ LITr -Mouse/x ] DEI2r #000b STH2k .&anchor STZ2
+	;manifest/dat
+	&>wt
+		INC2k INC2 LDA2 ank/get-strw #000b ADD2 STH2
+		ADD2r GTH2kr STHr ?{
+			POP2r POP2r
+			( exit ) DUP2 .&cat LDZ2 NEQ2 ?{ POP2 #ffff ;&on-exit-cat !/<open> }
+			( open ) ;&on-open-cat /<open> !/<draw-subs> }
+		STH2kr .&anchor STZ2
+		LDA2 LDAk ?&>wt
+	POP2r POP2r POP2 JMP2r
+
+@menu/<hover-sub> ( id -- )
+	DUP .&sub LDZ NEQ ?{ POP JMP2r }
+	.&sub STZ !/<draw-subs>
+
+@menu/<touch-sub> ( id -- )
+	( | clamp )
+	DUP .&cat LDZ2 LDA2k SWP2 SUB2 #0004 SUB2 #0006 DIV2 NIP LTH ?{
+		( outside ) POP #ffff ;&on-exit-sub !/<open> }
+	#00 SWP #0006 MUL2 #0004 ADD2 .&cat LDZ2 ADD2 #0002 ADD2 LDA2
+	( * ) JSR2 #ffff ;&on-exit-sub !/<open>
+
+@menu/<init> ( -- )
+	#ffff .&cat STZ2
+	[ LIT2 ff -&sub ] STZ !/<draw>
+
+@menu/<open> ( cat* vector* -- )
+	.Mouse/vector DEO2
+	.&cat STZ2
+	[ LIT2 ff -&sub ] STZ !<redraw-all>
+
+@menu/<draw> ( -- )
+	( | clear )
+	#0000 .Screen/x DEO2
+	#0028 .Screen/y DEO2
+	[ LIT2 a0 -Screen/pixel ] DEO
+	path/<draw-state>
+	path/<draw>
+	( | border )
+	#0000 .Screen/x DEO2
+	#0018 .Screen/y DEO2
+	[ LIT2 05 -Screen/width ] DEI2 #03 SFT2 SUB ;dotted-icn #01 <draw-times>
+	( >> )
+
+@menu/<draw-cats> ( -- )
+	#000c .Screen/x DEO2
+	#0004 .Screen/y DEO2
+	.&cat LDZ2 ;manifest/dat
+	&>wdc
+		EQU2k STH
+		INC2k INC2 LDA2 STHr /<draw-cat>
+		LDA2 LDAk ?&>wdc
+	POP2 POP2 JMP2r
+
+@menu/<draw-subs> ( -- )
+	.&anchor LDZ2 #0006 ADD2 .Screen/x DEO2
+	#001c .Screen/y DEO2
+	[ LITr 00 ] .&cat LDZ2 LDA2k SWP2 #0004 ADD2
+	&>loc
+		DUP2 STHkr .&sub LDZ EQU /<draw-sub>
+		INCr #0006 ADD2 GTH2k ?&>loc
+	POP2 POP2 POPr JMP2r
+
+@menu/<draw-cat> ( str* sel -- )
+	#00 SWP DUP ADD ;&cat-colors ADD2 LDA2 STH
+	[ LIT2 25 -Screen/auto ] DEO
+	( | cap )
+	;&cat-icn .Screen/addr DEO2
+	[ LITr -Screen/sprite ] DEOkr
+	( | text )
+	ank/<draw-left-color>
+	( | cap )
+	;&cat-icn .Screen/addr DEO2
+	[ LIT2r 1000 ] ORA2r DEOr
+	.Screen/x DEI2k #000b ADD2 ROT DEO2
+	JMP2r
+
+	&cat-colors [ 0100 0401 ]
+
+@menu/<draw-sub> ( sub* sel -- )
+	#00 SWP DUP ADD ;&sub-colors ADD2 LDA2
+	( | fill )
+	.&anchor LDZ2 #0006 ADD2 .Screen/x DEO2
+	#e0 ;fill-icn #21 <draw-times>
+	STH
+	( | text )
+	.&anchor LDZ2 #0009 ADD2 .Screen/x DEO2
+	DUP2 #0004 ADD2 LDA2 STHr ank/<draw-left-color>
+	( | butkey )
+	.&anchor LDZ2 #00e8 ADD2 .Screen/x DEO2
+	#00 ;ank/color-ascii STA
+	LDA2 SWP ank/<draw-button>
+	ank/<draw-key>
+	( | nextline )
+	.Screen/y DEI2k #0018 ADD2 ROT DEO2
+	JMP2r
+
+	&sub-colors [ 0401 0802 ]
+
+@menu/cat-icn [
+	0307 0707 0707 0707 0707 0707 0707 0707
+	0707 0707 0707 0707 ]
+
+~src/utils.tal
+

@@ -1,0 +1,12 @@
+@on-reset ( -> )
+	;hello-world print-text BRK
+
+@print-text ( str* -- )
+	&while ( -- )
+		( send ) LDAk #18 DEO
+		( loop ) INC2 LDAk ?&while
+	POP2 JMP2r
+
+@hello-world
+	"Hello. 00
+

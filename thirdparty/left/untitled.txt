@@ -1,0 +1,134 @@
+( Example file )
+
+@object ( some comment )
+@object &a $10 &b $123 &c $123 &d -hey
+@object &method ( a b -- c ) ADD JMP2r
+@object/cap $1 ( no display ) ;&member
+@object/method-a ( str* -- str* ) JMP2r
+@object/method-b ( str* -- str* ) JMP2r
+@object/member "hello &end @something-else
+
+( ctrl+enter ) src/left.tal
+
+( (nested) )
+
+@delete ( -- )
+	[ LIT2 &name $2 ]
+	[ LIT &field -default ]
+	has-length ?&block [ LIT "@ ]
+	get-from INC2k get-eof NEQ2 ?&single
+	POP2 JMP2r
+	&block ( a -- b )
+		erase-selection !select-reset
+	&single ( from* -- )
+		DUP2 cut-char !<select-a>
+	&undefined-method
+		LIT "& ( invalid )
+
+%macro ( a b -- mod ) {
+	DIVk MUL SUB }
+
+@a-long-truncated-label-too-long
+@b-label ( with a definition that is too long )
+@c-label &with-a-field-that-is-way-too-long ( definition )
+@d-label &field ( with a definition that is too long )
+
+(
+@|Category )
+
+@Une-Étiquette ( definition )
+
+@direct $10
+@enum &field-a $2 &field-b $2 &field-c $2 &field-d $2
+
+@another
+
+a very long line that doesn't quite display on a single screen to test the scroll-x behaviour, I think this needs a couple more characters.
+
++---------+---------+---------+---------+---------+---------+---------+---------+
+
+<a href='single_quote.html'>body</a>
+<a href="double_quotes.html">body</a>
+
+brackets[[abcdef][x][o]]
+
+~include
+_raw-rel
+,lit-rel
+-raw-zep
+.lit-zep
+=raw-abs
+;lit-abs
+?jci
+!jmi
+
+ !"#$%&'()*+,-./
+0123456789:;<=>?
+@ABCDEFGHIJKLMNO
+PQRSTUVWXYZ[\]^_
+`abcdefghijklmno
+pqrstuvwxyz{|}~
+
+Latin-1(0xC3)
+
+ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏ
+ÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞß
+àáâãäåæçèéêëìíîï
+ðñòóôõö÷øùúûüýþÿ
+
+Ça me fait peur de fêter noël là,
+sur cette île bizarroïde où une mère
+et sa môme essaient de me tuer avec
+un gâteau à la cigüe brûlé.
+
+Ðe kwik red foks dxumps óvyr ðy leízí broun dog
+as ðy sfínks yv blæk oniks dxudxiz ðeír leíngþí vou.
+
+jiïÏ
+
+@transform-join ( -- )
+	get-to get-from
+	&>l ( -- )
+		LDAk #20 GTH ?{
+			STH2k #20 STH2r [ LIT &ptr $1 ] STA }
+		INC2 GTH2k ?&>l
+	POP2 POP2 update-nav !reqdraw-textarea
+
+@transform-clip ( -- )
+	[ LITr 00 ] get-to get-from
+	&l ( -- )
+		LDAk #20 NEQ ?&>no-ws
+		INC2k wlen NIP STHkr ADD #50 LTH ?&>no-ws
+			STH2k #0a STH2r STA
+			POPr LITr 00 &>no-ws
+		INC2 INC2r GTH2k ?&l
+	POP2 POP2 POPr update-nav !reqdraw-textarea
+
+𐑑 ·𐑖𐑻𐑤𐑪𐑒 𐑣𐑴𐑥𐑟 𐑖𐑰 𐑦𐑟 𐑷𐑤𐑢𐑱𐑟 𐑞 𐑢𐑫𐑥𐑩𐑯.
+𐑲 𐑣𐑨𐑝 𐑕𐑧𐑤𐑛𐑩𐑥 𐑣𐑻𐑛 𐑣𐑦𐑥 𐑥𐑧𐑯𐑖𐑩𐑯 𐑣𐑻 𐑳𐑯𐑛𐑼 𐑧𐑯𐑦 𐑳𐑞𐑼 𐑯𐑱𐑥.
+
+(LETREC main
+	(main λ (INPUT)
+		(print-line (fib INPUT))
+	)
+	(fib λ (N)
+		(IF (EQ N (QUOTE 0)) (QUOTE 0)
+		(IF (EQ N (QUOTE 1)) (QUOTE 1)
+			(ADD
+				(fib (SUB N (QUOTE 1)))
+				(fib (SUB N (QUOTE 2))))))
+	)
+	(print-line λ (text)
+		(WRITE
+			(CONS (QUOTE :cli)
+			(CONS text
+			(CONS (QUOTE #\Newline)
+			(QUOTE NIL))))
+		)
+	)
+)
+
+LAST LINE
+
+
+

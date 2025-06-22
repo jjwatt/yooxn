@@ -1,0 +1,8 @@
+
+|0100
+
+	#1234 DUP2
+	POP POP2 POP2
+
+BRK
+

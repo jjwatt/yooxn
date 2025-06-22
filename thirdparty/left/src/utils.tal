@@ -1,0 +1,208 @@
+( Utils )
+
+@manifest/scan ( but key -- fn* )
+	ORAk ?{ POP2 #ffff JMP2r }
+	,&bk STR2
+	;&dat
+	&>cat
+		LDA2k OVR2 #0004 ADD2
+		&>opt
+			LDA2k [ LIT2 &bk $2 ] NEQ2 ?{
+				NIP2 NIP2 INC2 INC2 LDA2 JMP2r }
+			#0006 ADD2 GTH2k ?&>opt
+		POP2 POP2 LDA2 LDAk ?&>cat
+	POP2 #ffff JMP2r
+
+@<draw-times> ( color times addr* auto -- )
+	.Screen/auto DEO
+	.Screen/addr DEO2
+	SWP STH
+	[ LITr -Screen/sprite ]
+	&>l
+		DEOkr
+		INC DUP ?&>l
+	POP POP2r JMP2r
+
+(
+@|cursor )
+
+@cursor/<update> ( color -- )
+	Mouse/<update-focus>
+	( >> )
+
+@cursor/<update-trap> ( color -- )
+	[ LIT2 15 -Screen/auto ] DEO
+	;fill-icn .Screen/addr DEO2
+	#40 /<draw>
+	;&sprite-icn .Screen/addr DEO2
+	.Mouse/x DEI2 ,&x STR2
+	.Mouse/y DEI2 ,&y STR2
+	( >> )
+
+@cursor/<draw> ( color -- )
+	[ LIT2 &x $2 ] .Screen/x DEO2
+	[ LIT2 &y $2 ] .Screen/y DEO2
+	.Screen/sprite DEO
+	JMP2r
+
+@cursor/sprite-icn [ 80c0 e0f0 f8fc feff f8d8 8c0c 0606 0000 ]
+
+(
+@|theme )
+
+@theme/<reset> ( -- )
+	#e048 #e0a7 #e097
+	( >> )
+
+@theme/<set> ( r* g* b* -- )
+	.System/b DEO2
+	.System/g DEO2
+	.System/r DEO2
+	JMP2r
+
+@theme/<load> ( -- )
+	;&path .File/name DEO2
+	#0002 .File/length DEO2
+	;&r .File/read DEO2
+	;&g .File/read DEO2
+	;&b .File/read DEO2
+	.File/success-lb DEI ?{ !theme/<reset> }
+	[ LIT2 &r $2 ] [ LIT2 &g $2 ] [ LIT2 &b $2 ] !theme/<set>
+
+	&path ".theme $1
+
+(
+@|window )
+
+@window/<set-default-size> ( -- )
+	#0550 #02de
+	( >> )
+
+@window/<set-size> ( w* h* -- )
+	.Screen/height DEO2
+	.Screen/width DEO2
+	( | responsive )
+	.Screen/width DEI2 #0300 GTH2 .nav/visible STZ
+	.Screen/height DEI2 #0028 SUB2 .scrollbar/height STZ2 !<redraw-all>
+
+@window/toggle-expand ( -- )
+	.Screen/width DEI2 #0550 EQU2 ?{ !/<set-default-size> }
+	#0400 #022e !/<set-size>
+
+(
+@|stdlib )
+
+@hexc ( hex -- char )
+	#0f AND #0a LTHk ?{
+		SUB [ LIT "a ] ADD JMP2r }
+	POP [ LIT "0 ] ADD JMP2r
+
+@clab ( c -- bool )
+	DUP LIT "0 SUB #0a LTH ?&ok
+	DUP LIT "a SUB #1a LTH ?&ok
+	DUP LIT "A SUB #1a LTH ?&ok
+	DUP LIT "- EQU ?&ok
+	DUP LIT "_ EQU ?&ok
+	DUP LIT "< EQU ?&ok
+	DUP LIT "> EQU ?&ok
+	DUP LIT "? EQU ?&ok
+	DUP #7f GTH ?&ok
+	POP #00 &ok JMP2r
+
+@chex ( c -: <val> )
+	[ LIT "0 ] SUB DUP #0a LTH ?{
+		#27 SUB DUP #10 LTH ?{ POP #ff } }
+	JMP2r
+
+@flen ( path* -- size* )
+	.File/name DEO2
+	#0004 .File/length DEO2
+	;&buf DUP2 .File/stat DEO2
+	LDAk [ LIT "- ] EQU ?&fail
+	LDAk [ LIT "? ] EQU ?&fail
+	LDAk [ LIT "! ] EQU ?&fail
+	!shex
+
+	&fail ( buf* -- size* )
+	POP2 #0000 JMP2r
+
+@feof ( buf* -- eof )
+	.File/read DEO2
+	.File/success DEI2 #0000 EQU2 JMP2r
+
+@wlen ( str* -- len* )
+	DUP2
+	&>w
+		INC2 LDAk #20 GTH ?&>w
+	SWP2 SUB2 JMP2r
+
+@wcap ( str* -- str* )
+	LDAk #20 GTH ?{ JMP2r }
+	INC2 !wcap
+
+@shex ( str* -: value* )
+	[ LIT2r 0000 ]
+	&>w
+		( acc ) [ LITr 40 ] SFT2r
+		( res ) LDAk chex [ LITr 00 ] STH
+		ADD2r INC2 LDAk ?&>w
+	POP2 STH2r JMP2r
+
+@sseg ( a* b* -- bool )
+	STH2
+	&>l
+		LDAk LDAkr STHr NEQ ?&end
+		INC2k LDA #00 EQU ?&end
+		INC2 INC2r !&>l
+	&end LDA LDAr STHr EQU JMP2r
+
+@mcmp ( a* b* length* -- f )
+	SWP2 STH2
+	ADD2k NIP2 SWP2
+	&>l
+		LDAk LDAkr STHr NEQ ?{ INC2r INC2 GTH2k ?&>l }
+	EQU2 POP2r JMP2r
+
+@<mclr> ( src* len* -- )
+	,&length STR2
+	,&addr STR2
+	;&mmu .System/expansion DEO2
+	JMP2r
+	&mmu 00 &length $2 0000 &addr $2 00
+
+@<msfl> ( a* distance* -- )
+	OVR2 ,&dst STR2
+	ADD2k ,&src STR2
+	POP2 get-eof SWP2 SUB2 ,&length STR2
+	;&mmu .System/expansion DEO2
+	JMP2r
+	&mmu 01 &length 0000 0000 &src 0000 0000 &dst 0000
+
+@<msfr> ( a* distance* -- )
+	ADD2k ,&dst STR2
+	OVR2 ,&src STR2
+	POP2 get-eof SWP2 SUB2 ,&length STR2
+	;&mmu .System/expansion DEO2
+	JMP2r
+	&mmu 02 &length 0000 0000 &src 0000 0000 &dst 0000
+
+@<phex> ( short* -- )
+	SWP <phex>/b
+	&b ( -- )
+	DUP #04 SFT <phex>/c
+	&c ( -- )
+	#0f AND DUP #09 GTH #27 MUL ADD #30 ADD #18 DEO
+	JMP2r
+
+@<pstr> ( str* -- )
+	LDAk #18 DEO
+	INC2 LDAk ?<pstr>
+	POP2 JMP2r
+
+(
+@|assets )
+
+@untitled-txt "untitled.txt $1
+
+~src/assets.tal
+

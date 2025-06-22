@@ -1,0 +1,17 @@
+
+@draw-gly ( char color -- )
+
+	STH STH
+	.Screen/y DEI2
+	( y ) #00 STHkr #30 AND #24 SFT OVR2 ADD2 .Screen/y DEO2
+	#0400
+	&loop
+		STHkr #0f AND OVR SFT #01 AND
+		OVRr STHr #00 NEQ MUL .Screen/pixel DEO
+		INC GTHk ,&loop JCN
+	POP2
+	.Screen/y DEO2
+	( x ) NIPr STHr #06 SFT #01 AND JMP JMP2r
+		.Screen/x DEI2k INC2 ROT DEO2
+
+JMP2r
