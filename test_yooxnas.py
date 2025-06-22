@@ -89,5 +89,15 @@ class TestComments(unittest.TestCase):
                             'test_out/math32.rom')
 
 
+class TestMandelbrot(unittest.TestCase):
+    def setUp(self):
+        self.test_out = Path('test_out')
+        self.test_out.mkdir(exist_ok=True)
+
+    def testMandelbrot(self):
+        load_and_parse_file('examples/mandelbrot.tal',
+                            'test_out/mandelbrot.rom')
+
+
 if __name__ == "__main__":
     unittest.main()
