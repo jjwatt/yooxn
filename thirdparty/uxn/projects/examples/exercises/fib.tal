@@ -1,0 +1,47 @@
+( Fibonacci: Numbers made of the two numbers before it )
+
+|100
+
+@on-reset ( -> )
+	#0019 #0001
+	&>l ( -- )
+		( index ) DUP2 <pdec>
+		#2018 DEO
+		( recursive ) DUP2 fib <pdec>
+		#2018 DEO
+		( tail-recursive ) DUP2 #0000 #0001 ROT2 fibrec <pdec>
+		( lb ) #0a18 DEO
+		POP2 POP2 INC2 GTH2k ?&>l
+	POP2 POP2
+	( end ) #800f DEO
+	BRK
+
+(
+@|recursive )
+
+@fib ( num* -- numfib* )
+	#0001 GTH2k ?{ POP2 JMP2r }
+	SUB2k fib STH2
+	INC2 SUB2 fib STH2r ADD2 JMP2r
+
+(
+@|tail-recursive )
+
+@fibrec ( a* b* num* -- a* b* numfib* )
+	#0001 NEQ2k ?{ POP2 POP2 DUP2 JMP2r }
+	SUB2 STH2
+	SWP2 OVR2 ADD2 STH2r !fibrec
+
+(
+@|stdlib )
+
+@<pdec> ( short* -- )
+	[ LIT2r ff00 ]
+	&>read ( -- )
+		#000a DIV2k STH2k MUL2 SUB2 STH2r INCr ORAk ?&>read
+	POP2
+	&>write ( -- )
+		NIP #30 ADD #18 DEO
+		OVRr ADDr STHkr ?&>write
+	POP2r JMP2r
+
