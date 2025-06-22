@@ -1,0 +1,5 @@
+#!/bin/bash
+# debug
+
+uxnasm "$1".tal "$1".rom &&
+    uxnemu ../roms/beetbug.rom "$1".rom

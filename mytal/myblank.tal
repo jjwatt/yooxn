@@ -1,0 +1,93 @@
+( a blank file )
+%ABS2 { DUP2 #0f SFT2 EQU #05 JCN #0000 SWP2 SUB2 }
+%LTS2  { #8000 ADD2 SWP2 #8000 ADD2 GTH2 }
+%GTS2  { #8000 ADD2 SWP2 #8000 ADD2 LTH2 }
+%WIDTH { #0100 } %HEIGHT { #00a0 }
+%MOD { DUP2 DIV MUL SUB } ( a b -- a%b )
+%MOD2 { OVR2 OVR2 DIV2 MUL2 SUB2 } ( a b -- a%b )
+%HALF { #01 SFT } ( number -- number/2 )
+%HALF2 { #01 SFT2 } (number -- number/2 )
+%X-CENTER { .Screen/width DEI2 HALF2 } ( -- width )
+%Y-CENTER { .Screen/height DEI2 HALF2 } ( -- height )
+
+|00 @System     &vector $2 &wst      $1 &rst    $1 &eaddr  $2 &ecode  $1 &pad     $1 &r       $2 &g      $2 &b     $2 &debug  $1 &halt $1
+|10 @Console    &vector $2 &read     $1 &pad    $5 &write  $1 &error  $1
+|20 @Screen     &vector $2 &width    $2 &height $2 &auto   $1 &pad    $1 &x       $2 &y       $2 &addr   $2 &pixel $1 &sprite $1
+|30 @Audio0     &vector $2 &position $2 &output $1 &pad    $3 &adsr   $2 &length  $2 &addr    $2 &volume $1 &pitch $1
+|40 @Audio1     &vector $2 &position $2 &output $1 &pad    $3 &adsr   $2 &length  $2 &addr    $2 &volume $1 &pitch $1
+|50 @Audio2     &vector $2 &position $2 &output $1 &pad    $3 &adsr   $2 &length  $2 &addr    $2 &volume $1 &pitch $1
+|60 @Audio3     &vector $2 &position $2 &output $1 &pad    $3 &adsr   $2 &length  $2 &addr    $2 &volume $1 &pitch $1
+|80 @Controller &vector $2 &button   $1 &key    $1 &func   $1
+|90 @Mouse      &vector $2 &x        $2 &y      $2 &state  $1 &pad    $3 &scrollx $2 &scrolly $2
+|a0 @File0      &vector $2 &success  $2 &stat   $2 &delete $1 &append $1 &name    $2 &length  $2 &read   $2 &write $2
+|b0 @File1      &vector $2 &success  $2 &stat   $2 &delete $1 &append $1 &name    $2 &length  $2 &read   $2 &write $2
+|c0 @DateTime   &year   $2 &month    $1 &day    $1 &hour   $1 &minute $1 &second  $1 &dotw    $1 &doty   $2 &isdst $1
+
+( zero page )
+|00
+@cat $1
+@dog $1
+@bat $1
+@rat $1
+@nil $1
+( program )
+
+|0100 ( -> )
+	( { =cat =dog =bat } STH2r ;rat member? )
+	( print-num )
+	( { 01 02 03 04 05 } STH2r ;double foreach )
+	
+BRK
+
+@member? ( {items}* target* -- res* )
+	,&t STR2
+	DUP2k #0002 SUB2 LDA2 ADD2 SWP2
+	&l ( -- )
+		LDA2k [ LIT2 &t $2 ] EQU2 ?&found
+		INC2 INC2 GTH2k ?&l
+	POP2 ;nil &found NIP2 POP
+	JMP2r
+
+
+@mod ( a b -- c ) DIVk MUL SUB JMP2r
+@double ( addr* -- addr* )
+	STH2k LDAk
+	DUP ADD
+	STH2r STA
+JMP2r
+@foreach ( {bytes}* fn* -- bytes* )
+	,&t STR2
+	DUP2k #0002 SUB2 LDA2 ADD2 SWP2
+	&l ( -- )
+		[ LIT2 &t $2 ] JSR2 INC2 GTH2k ?&l
+	POP2 POP2
+JMP2r
+@print-dec ( num -- ) #0a DIV ,print-num JSR #0a ,mod JSR
+@print-num ( num -- ) #30 ADD #18 DEO JMP2r
+@print-str ( addr* -- ) &loop LDAk #18 DEO INC2 LDAk ,&loop JCN POP2 JMP2r
+@print ( short* -- )
+	SWP ,&byte JSR
+	&byte ( byte -- ) DUP #04 SFT ,&char JSR
+	&char ( char -- ) #0f AND DUP #09 GTH #27 MUL ADD #30 ADD #18 DEO
+JMP2r
+@pblank ( -- )
+	{ 0a 00 } STH2r
+	&wa ( -- )
+		LDAk .Console/write DEO
+		INC2 LDAk ?&wa
+	POP2
+JMP2r
+@<phex> ( short* -: )
+	SWP /b
+	&b ( byte -: )
+		DUP #04 SFT /c
+	&c ( byte -: )
+		#0f AND DUP #09 GTH #27 MUL ADD [ LIT "0 ] ADD #18 DEO
+		JMP2r
+@pstr-inline-loop
+	[ LITr 18 ] DEOr INC2r
+
+@pstr-inline ( -- | retaddr -- )
+	LDAkr DUPr [ LITr _pstr-inline-loop ] JCNr
+	POPr INC2r
+JMP2r

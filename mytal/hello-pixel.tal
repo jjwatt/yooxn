@@ -1,0 +1,35 @@
+( hello-line.tal )
+
+( devices )
+( | is 'absolute pad' @ is label, & is sublabel )
+( this names regions of memory )
+( $ skips bytes, so $2 will skip 2 bytes )
+( $x can be seen as setting the prev label to a pointer that 
+  points at x bytes )
+|00 @System  &vector $2 &pad $6 &r $2 &g $2 &b $2
+|20 @Screen  &vector $2 &width $2 &height $2
+             &pad $2 &x $2 &y $2 &addr $2
+             &pixel $1 &sprite $1
+
+( macros )
+( draw a pixel on the fg with color 1 #41 )
+%DRAW-PIXEL { #41 .Screen/pixel DEO } ( -- )
+( get x short from the input port, increment it and write it back )
+%INC-X { .Screen/x DEI2 INC2 .Screen/x DEO2 } ( -- )
+
+( main program )
+|0100
+      ( set system colors )
+      #2ce9 .System/r DEO2 (202, c1c, ece, 905 4-bit color )
+      #01c0 .System/g DEO2
+      #2ce5 .System/b DEO2
+
+      ( draw pixels on the screen )
+      #0010 .Screen/x DEO2
+      #0010 .Screen/y DEO2
+      DRAW-PIXEL INC-X
+      DRAW-PIXEL INC-X
+      DRAW-PIXEL INC-X
+      DRAW-PIXEL INC-X
+      DRAW-PIXEL INC-X
+      DRAW-PIXEL

@@ -1,0 +1,183 @@
+%ABS2 { DUP2 #0f SFT2 EQU #05 JCN #0000 SWP2 SUB2 }
+%LTS2  { #8000 ADD2 SWP2 #8000 ADD2 GTH2 }
+%GTS2  { #8000 ADD2 SWP2 #8000 ADD2 LTH2 }
+%WIDTH { #0100 } %HEIGHT { #00a0 }
+%MOD { DUP2 DIV MUL SUB } ( a b -- a%b )
+%MOD2 { OVR2 OVR2 DIV2 MUL2 SUB2 } ( a b -- a%b )
+
+( devices )
+
+|00 @System [ &vector $2 &pad $6 &r $2 &g $2 &b $2 ]
+|20 @Screen [ &vector $2 &width $2 &height $2 &pad $2 &x $2 &y $2 &addr $2 &pixel $1 &sprite $1 ]
+|10 @Console [ &vector $2 &read $1 &pad $5 &write $1 &error $1 ]
+|c0 @DateTime [ &year   $2 &month    $1 &day    $1 &hour   $1 &minute $1 &second  $1 &dotw    $1 &doty   $2 &isdst $1 ]
+
+( Variables in zero-page )
+|0000
+@color [ &byte $1 ]
+@circle [ &xc $2 &yc $2 &x $2 &y $2 &radius $2 &d $2 ]
+@numpoints [ $2 ]
+
+( program )
+|0100 ( -> )
+    ( theme ) 
+    #0fe5 .System/r DEO2 
+    #0fc5 .System/g DEO2 
+    #0f25 .System/b DEO2
+
+    ( initialize numpoints )
+    #0000 .numpoints STZ2
+
+     ( circle )
+    .Screen/width DEI2 #01 SFT2 ( xc width / 2 )
+    .Screen/height DEI2 #01 SFT2 ( yc height / 2 )
+	WIDTH #02 SFT2 ( radius width / 4 )
+	#02 ( color )
+        ;draw-circle JSR2
+
+     ( circle in a circle. donut. )
+    .Screen/width DEI2 #01 SFT2 ( xc width / 2 )
+    .Screen/height DEI2 #01 SFT2 ( yc height / 2 )
+	WIDTH #04 SFT2 ( radius width / 8 )
+	#02 ( color )
+        ;draw-circle JSR2
+
+    ( .numpoints LDZ2 ;pdec JSR2 )
+
+BRK	
+
+@draw-circle ( xc yc r color -- )
+	( store arguments in vars )
+	.color STZ .circle/radius STZ2 .circle/yc STZ2 .circle/xc STZ2
+	( set x,y to (0, radius) -- the top of the circle )
+	#0000 .circle/x STZ2 .circle/radius LDZ2 .circle/y STZ2 ( set x to 0 and y to radius )
+	.circle/radius LDZ2 #10 SFT2 .circle/d STZ2 ( d, decision parameter, starting d is radius * 2 )
+
+	( draw initial points )
+	;&seg JSR2
+	( main loop to increment and draw remaining points )
+	&loop
+		.circle/x LDZ2 INC2 .circle/x STZ2 ( incr x )
+		( when d < 1, using LTS2 for signed less than )
+		.circle/d LDZ2 #0001 LTS2 ,&else JCN  ( if .circle/d < 1 go to else and skip incr y )
+		( when d >= 1)
+		.circle/y LDZ2 #0001 SUB2 .circle/y STZ2 ( decr y )
+		( d = d + (x - y) really ( x - y ) << 32 + d)
+		.circle/x LDZ2 .circle/y LDZ2 SUB2 #20 SFT2 ( subtract x - y then bitshift #20 )
+		.circle/d LDZ2 ADD2 .circle/d STZ2 ( add previous result to .circle/d )
+		;&end JMP2
+		&else
+			( d = d + (2x + 3 ) from Bresenham's algorithm )
+			( our's is just d = d + x, advancing horizonatally but not adjusting y downward )
+			( bitshifted with 32 for 2^16 to scale to fixed point )
+			.circle/x LDZ2 #20 SFT2 .circle/d LDZ2 ADD2 .circle/d STZ2 ( x and add to d )
+		&end
+		;&seg JSR2 ( draw )
+		.circle/y LDZ2 .circle/x LDZ2
+			#0001 SUB2 GTS2 ,&loop JCN  ( if y > x - 1, continue loop )
+	JMP2r
+	&seg
+		( subroutine seg draws 8 symmetric points around the circles center )
+		( mirroring the current (x, y) in all 8 directions )
+		.circle/x LDZ2
+			;prng-init JSR2
+			;prng JSR2
+			#0005 MOD2
+			ADD2 .circle/x STZ2
+		.circle/xc LDZ2 .circle/x LDZ2 ADD2  ( x center + x )
+		.Screen/x DEO2  ( write out x coordinate )
+		.circle/yc LDZ2 .circle/y LDZ2 ADD2 ( y center + y )
+		.Screen/y DEO2
+		.color LDZ .Screen/pixel DEO
+		.numpoints LDZ2 INC2 .numpoints STZ2 ( incr numpoints )
+
+		.circle/xc LDZ2 .circle/x LDZ2 SUB2 .Screen/x DEO2  ( x center - x )
+		.circle/yc LDZ2 .circle/y LDZ2 ADD2 .Screen/y DEO2  ( y center + y )
+		.color LDZ .Screen/pixel DEO
+		.numpoints LDZ2 INC2 .numpoints STZ2 ( incr numpoints )
+	
+		.circle/xc LDZ2 .circle/x LDZ2 ADD2 .Screen/x DEO2  ( x center + x )
+		.circle/yc LDZ2 .circle/y LDZ2 SUB2 .Screen/y DEO2  ( y center - y )
+		.color LDZ .Screen/pixel DEO
+		.numpoints LDZ2 INC2 .numpoints STZ2 ( incr numpoints )
+
+		.circle/xc LDZ2 .circle/x LDZ2 SUB2 .Screen/x DEO2  ( x center - x )
+		.circle/yc LDZ2 .circle/y LDZ2 SUB2 .Screen/y DEO2  ( y center - y )
+		.color LDZ .Screen/pixel DEO
+		.numpoints LDZ2 INC2 .numpoints STZ2 ( incr numpoints )
+	
+		.circle/xc LDZ2 .circle/y LDZ2 ADD2 .Screen/x DEO2 ( x center + x )
+		.circle/yc LDZ2 .circle/x LDZ2 ADD2 .Screen/y DEO2 ( y center + y )
+		.color LDZ .Screen/pixel DEO
+		.numpoints LDZ2 INC2 .numpoints STZ2 ( incr numpoints )
+
+		.circle/xc LDZ2 .circle/y LDZ2 SUB2 .Screen/x DEO2 ( x center - x )
+		.circle/yc LDZ2 .circle/x LDZ2 ADD2 .Screen/y DEO2 ( y center + y )
+		.color LDZ .Screen/pixel DEO
+		.numpoints LDZ2 INC2 .numpoints STZ2 ( incr numpoints )
+	
+		.circle/xc LDZ2 .circle/y LDZ2 ADD2 .Screen/x DEO2 ( x center + y )
+		.circle/yc LDZ2 .circle/x LDZ2 SUB2 .Screen/y DEO2 ( y center - x )
+		.color LDZ .Screen/pixel DEO
+		.numpoints LDZ2 INC2 .numpoints STZ2 ( incr numpoints )
+	
+		.circle/xc LDZ2 .circle/y LDZ2 SUB2 .Screen/x DEO2 ( x center - y )
+		.circle/yc LDZ2 .circle/x LDZ2 SUB2 .Screen/y DEO2 ( y center - x )
+		.color LDZ .Screen/pixel DEO
+		.numpoints LDZ2 INC2 .numpoints STZ2 ( incr numpoints )
+	JMP2r
+
+@print-dec ( dec -- )
+	DUP #64 DIV print-num/try
+	DUP #0a DIV print-num/try
+	( >> )
+
+@print-num ( num -- )
+	#0a DIVk MUL SUB [ LIT "0 ] ADD #18 DEO
+	JMP2r
+	&try ( num -- )
+		DUP ?print-num
+		POP JMP2r
+@pdec ( short* -- )
+	#2710 [ LIT2r 00fb ]
+	&w ( -- )
+		DIV2k #000a DIV2k MUL2 SUB2 SWPr EQUk OVR STHkr EQU AND ?{
+			DUP [ LIT "0 ] ADD #19 DEO
+			INCr }
+		POP2 #000a DIV2 SWPr INCr STHkr ?&w
+	POP2r POP2 POP2 JMP2r
+
+@<phex> ( short* -: )
+	SWP /b
+	&b ( byte -: )
+		DUP #04 SFT /c
+	&c ( byte -: )
+		#0f AND DUP #09 GTH #27 MUL ADD [ LIT "0 ] ADD #18 DEO
+		JMP2r
+
+@prng-init ( -- )
+	[ LIT2 00 -DateTime/second ] DEI
+		[ LIT2 00 -DateTime/minute ] DEI #60 SFT2 EOR2
+		[ LIT2 00 -DateTime/hour ] DEI #c0 SFT2 EOR2 ,prng/x STR2
+	[ LIT2 00 -DateTime/hour ] DEI #04 SFT2
+		[ LIT2 00 -DateTime/day ] DEI #10 SFT2 EOR2
+		[ LIT2 00 -DateTime/month ] DEI #60 SFT2 EOR2
+		.DateTime/year DEI2 #a0 SFT2 EOR2 ,prng/y STR2
+JMP2r
+
+@prng ( -- number* )
+	[ LIT2 &x $2 ]
+		DUP2 #50 SFT2 EOR2
+		DUP2 #03 SFT2 EOR2
+	[ LIT2 &y $2 ] DUP2 ,&x STR2
+		DUP2 #01 SFT2 EOR2 EOR2
+		,&y STR2k POP
+JMP2r
+
+@print-str ( str* -- )
+
+	&while
+		LDAk #18 DEO
+		INC2 LDAk ,&while JCN
+	POP2
+JMP2r

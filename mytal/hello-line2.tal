@@ -1,0 +1,49 @@
+( hello-sprite.tal )
+
+( devices )
+|00 @System [ &vector $2 &pad $6 &r $2 &g $2 &b $2 ]
+|20 @Screen [ &vector $2 &width $2 &height $2 &pad $2
+	      &x $2 &y $2 &addr $2 &pixel $1 &sprite $1 ]
+|80 @Controller [ &vector $2 &button $1 &key $1 ]
+
+( macros )
+%HALF { #01 SFT } ( number -- number/2 )
+%HALF2 { #01 SFT2 } (number -- number/2 )
+%X-CENTER { .Screen/width DEI2 HALF2 } ( -- width )
+%Y-CENTER { .Screen/height DEI2 HALF2 } ( -- height )
+	
+( zero page )
+|0000
+@pixel [ &x $2 &y $2 ]
+
+( init )
+|0100
+
+	( set system colors )
+	#2ce9 .System/r DEO2
+	#01c0 .System/g DEO2
+	#2ce5 .System/b DEO2
+
+	( set initial x,y coords )
+	#0008 .pixel/x STZ2
+	Y-CENTER .pixel/y STZ2
+
+	( set screen vector )
+	;on-frame .Screen/vector DEO2
+BRK
+
+@on-frame ( -> )
+	( load x,y coords from zero page and send to screen device )
+	.pixel/x LDZ2 .Screen/x DEO2
+	.pixel/y LDZ2 .Screen/y DEO2
+	
+	#01 .Screen/pixel DEO
+	( increment pixel/x )
+	.pixel/x LDZ2 INC2 .pixel/x STZ2
+BRK
+
+( sprites )
+@arrow [ 0102 0488 d0e0 f0f8 ]
+@rock [ 3c4e 9ffd f962 3c00 ]
+@character [ 3c7e 5a7f 1b3c 5a18 ]
+@square [ ff81 8181 8181 81ff ]

@@ -1,0 +1,21 @@
+
+|10 @Console &vector $2 &read $1 &pad $5 &write $1 &error $1
+
+|0100 ( -> )
+
+	;hello-word print-text
+	#800f DEO
+
+BRK
+
+@print-text ( str* -- )
+
+	&while
+		( send ) LDAk .Console/write DEO
+		( loop ) INC2 LDAk ?&while
+	POP2
+
+JMP2r
+
+@hello-word "Hello 20 "World! 0a
+

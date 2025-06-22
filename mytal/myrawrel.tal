@@ -1,0 +1,14 @@
+|0100
+
+	;pstr-inline JSR2 "Hello, 20 "Everybody 0a 00 ( address is 104 )
+	#010f DEO
+BRK
+
+@pstr-inline-loop
+	[ LITr 18 ] DEOr INC2r ( write letter to console and then increment address )
+
+@pstr-inline ( -- | retaddr -- )
+	LDAkr DUPr  ( load next letter and then duplicate it rs: -- 01 04 48 )
+		[ LITr _pstr-inline-loop ] JCNr
+	POPr INC2r
+JMP2r

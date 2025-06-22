@@ -1,0 +1,5 @@
+#!/bin/bash
+# leftbike
+
+uxnemu ~/uxn/roms/left.rom |
+    uxnemu ~/uxn/roms/bicycle.rom

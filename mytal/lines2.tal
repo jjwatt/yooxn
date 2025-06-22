@@ -1,0 +1,163 @@
+( devices )
+|00 @System [ &vector $2 &pad $6 &r $2 &g $2 &b $2 ]
+|20 @Screen [ &vector $2 &width $2 &height $2 &pad $2
+	      &x $2 &y $2 &addr $2 &pixel $1 &sprite $1 ]
+|10 @Console [ &vector $2 &read $1 &pad $5 &write $1 &error $1 ]
+|c0 @DateTime   &year   $2 &month    $1 &day    $1 &hour   $1 &minute $1 &second  $1 &dotw    $1 &doty   $2 &isdst $1
+
+( macros )
+%ABS2 { DUP2 #0f SFT2 EQU #05 JCN #0000 SWP2 SUB2 }
+%LTS2  { #8000 ADD2 SWP2 #8000 ADD2 GTH2 }
+%GTS2  { #8000 ADD2 SWP2 #8000 ADD2 LTH2 }
+%WIDTH { #0100 } %HEIGHT { #00a0 }
+%MOD { DUP2 DIV MUL SUB } ( a b -- a%b )
+%MOD2 { OVR2 OVR2 DIV2 MUL2 SUB2 } ( a b -- a%b )
+%HALF { #01 SFT } ( number -- number/2 )
+%HALF2 { #01 SFT2 } (number -- number/2 )
+%X-CENTER { .Screen/width DEI2 HALF2 } ( -- width )
+%Y-CENTER { .Screen/height DEI2 HALF2 } ( -- height )
+%BREAKPOINT { #010e DEO }
+%DEC2 { #0001 SUB2 }
+
+( Variables in zero-page )
+|00
+@color [ &byte $1 ]
+@line [ &x0 $2 &y0 $2 &x $2 &y $2 &sx $2 &sy $2 &dx $2 &dy $2 &e1 $2 &e2 $2 ]
+@lastx $2
+@lasty $2
+@rand $2
+@counter [ $2 ]
+
+( init )
+|0100
+        ( set system colors )
+	#2ce9 .System/r DEO2
+	#01c0 .System/g DEO2
+	#2ce5 .System/b DEO2
+
+	( for x=0 x < width; x+=xstep)
+	( &loop )
+	( 	.counter LDZ2 INC2 .counter STZ2 )
+	( INC2 GTH2k ?&loop )
+	( .counter LDZ2 <phex> pblank )
+	( #0001 #0100 #0200 #0100 #01 line-slow )
+	#01f0 ( width - borderx )
+	#0000 ( counter )
+	( for x=0 x < width; x+=1)
+	&loop
+		( change y by random y step )
+		( draw a line stepwise but change y with ystep )
+		( draw line from lastx, lasty to new x + xstep, y + ystep )
+	INC2 GTH2k ?&loop
+
+BRK
+
+
+@line-slow ( x1 y1 x2 y2 color -- )
+	( load ) .color STZ
+	#0001 SUB2 .line/y0 STZ2
+	#0001 SUB2 .line/x0 STZ2
+	.line/y STZ2 .line/x STZ2
+	.line/x0 LDZ2 .line/x LDZ2 SUB2 ABS2 .line/dx STZ2 ( dx = abs(x0 - x) )
+	.line/y0 LDZ2 .line/y LDZ2 SUB2 ABS2 #0000 SWP2 SUB2 .line/dy STZ2 (dy = abs(y0 - y) )
+	#ffff #00 .line/x LDZ2 .line/x0 LDZ2 LTS2 #10 SFT2 ADD2 .line/sx STZ2 ( if x < x0 )
+	#ffff #00 .line/y LDZ2 .line/y0 LDZ2 LTS2 #10 SFT2 ADD2 .line/sy STZ2 ( if y < y0 )
+	.line/dx LDZ2 .line/dy LDZ2 ADD2 .line/e1 STZ2 ( dx + dy -> e1 )
+	&loop
+		( set pixel )
+		.line/x LDZ2 .Screen/x DEO2 .line/y LDZ2 .Screen/y DEO2 .color LDZ .Screen/pixel DEO
+		.line/x LDZ2 .line/x0 LDZ2 EQU2 .line/y LDZ2 .line/y0 LDZ2
+			EQU2 AND ,&end JCN ( if x == x0 && y == y0 break )
+		.line/e1 LDZ2 #10 SFT2 .line/e2 STZ2 ( e1 * 2.0 -> e2 )
+		.line/e2 LDZ2 .line/dy LDZ2 LTS2 ,&skipy JCN  ( if e2 < dy skipy )
+			.line/e1 LDZ2 .line/dy LDZ2 ADD2 .line/e1 STZ2 ( e1 + dy -> e1 )
+			.line/x LDZ2 .line/sx LDZ2 ADD2 .line/x STZ2 ( x + sx -> x )
+		&skipy
+		.line/e2 LDZ2 .line/dx LDZ2 GTS2 ,&skipx JCN ( if e2 > dx skipx ) 
+			.line/e1 LDZ2 .line/dx LDZ2 ADD2 .line/e1 STZ2 ( e1 + dx -> e1 )
+			.line/y LDZ2 .line/sy LDZ2 ADD2 .line/y STZ2 ( y + sy -> y )
+		&skipx
+		;&loop JMP2
+	&end
+JMP2r
+
+@on-frame ( -> )
+BRK
+
+@pblank ( -- )
+	{ 0a 00 }
+	STH2r
+	&wa ( -- )
+		LDAk .Console/write DEO
+		INC2 LDAk ?&wa
+	POP2
+JMP2r
+
+@print-dec ( dec -- )
+	DUP #64 DIV print-num/try
+	DUP #0a DIV print-num/try
+	( >> )
+
+@print-num ( num -- )
+	#0a DIVk MUL SUB [ LIT "0 ] ADD #18 DEO
+	JMP2r
+	&try ( num -- )
+		DUP ?print-num
+		POP JMP2r
+@pdec ( short* -- )
+	#2710 [ LIT2r 00fb ]
+	&w ( -- )
+		DIV2k #000a DIV2k MUL2 SUB2 SWPr EQUk OVR STHkr EQU AND ?{
+			DUP [ LIT "0 ] ADD #19 DEO
+			INCr }
+		POP2 #000a DIV2 SWPr INCr STHkr ?&w
+	POP2r POP2 POP2 JMP2r
+
+@<phex> ( short* -: )
+	SWP /b
+	&b ( byte -: )
+		DUP #04 SFT /c
+	&c ( byte -: )
+		#0f AND DUP #09 GTH #27 MUL ADD [ LIT "0 ] ADD #18 DEO
+		JMP2r
+
+@pstr-inline-loop
+
+	[ LITr 18 ] DEOr INC2r
+
+@pstr-inline ( -- | retaddr -- )
+	LDAkr DUPr [ LITr _pstr-inline-loop ] JCNr
+	POPr INC2r
+JMP2r
+
+@print ( short* -- )
+	SWP ,&byte JSR
+	&byte ( byte -- ) DUP #04 SFT ,&char JSR
+	&char ( char -- ) #0f AND DUP #09 GTH #27 MUL ADD #30 ADD #18 DEO
+JMP2r
+
+@print-str ( str* -- )
+	&while
+		LDAk #18 DEO
+		INC2 LDAk ,&while JCN
+	POP2
+JMP2r
+
+@prng-init ( -- )
+	[ LIT2 00 -DateTime/second ] DEI
+		[ LIT2 00 -DateTime/minute ] DEI #60 SFT2 EOR2
+		[ LIT2 00 -DateTime/hour ] DEI #c0 SFT2 EOR2 ,prng/x STR2
+	[ LIT2 00 -DateTime/hour ] DEI #04 SFT2
+		[ LIT2 00 -DateTime/day ] DEI #10 SFT2 EOR2
+		[ LIT2 00 -DateTime/month ] DEI #60 SFT2 EOR2
+		.DateTime/year DEI2 #a0 SFT2 EOR2 ,prng/y STR2
+JMP2r
+
+@prng ( -- number* )
+	[ LIT2 &x $2 ]
+		DUP2 #50 SFT2 EOR2
+		DUP2 #03 SFT2 EOR2
+	[ LIT2 &y $2 ] DUP2 ,&x STR2
+		DUP2 #01 SFT2 EOR2 EOR2
+		,&y STR2k POP
+JMP2r

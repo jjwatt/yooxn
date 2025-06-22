@@ -1,0 +1,17 @@
+|0100
+
+	;pstr-inline JSR2 "Hello, 20 "UXN! 0a 00
+	#010f DEO
+
+BRK
+
+@pstr-inline-loop
+
+	[ LITr 18 ] DEOr INC2r
+
+@pstr-inline ( -- | retaddr -- )
+
+	LDAkr DUPr [ LITr _pstr-inline-loop ] JCNr
+	POPr INC2r
+JMP2r
+
