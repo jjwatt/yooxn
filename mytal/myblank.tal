@@ -6,7 +6,7 @@
 %MOD { DUP2 DIV MUL SUB } ( a b -- a%b )
 %MOD2 { OVR2 OVR2 DIV2 MUL2 SUB2 } ( a b -- a%b )
 %HALF { #01 SFT } ( number -- number/2 )
-%HALF2 { #01 SFT2 } (number -- number/2 )
+%HALF2 { #01 SFT2 } ( number -- number/2 )
 %X-CENTER { .Screen/width DEI2 HALF2 } ( -- width )
 %Y-CENTER { .Screen/height DEI2 HALF2 } ( -- height )
 

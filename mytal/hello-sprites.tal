@@ -59,7 +59,7 @@ INIT-X
 #0f .Screen/sprite DEO 8ADD-Y
 
 INIT-X
-;rock .Screen/addr DEO2 (DEO2 cus it's an address)
+;rock .Screen/addr DEO2
 
 #01 .Screen/sprite DEO
 8ADD-X
@@ -72,5 +72,3 @@ BRK
 @arrow [ 0102 0488 d0e0 f0f8 ]
 @rock [ 3c4e 9ffd f962 3c00 ]
 @character [ 3c7e 5a7f 1b3c 5a18 ]
-
- 

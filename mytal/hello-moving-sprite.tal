@@ -40,7 +40,7 @@ BRK
 		#40 AND ( isolate bit 6, LEFT )
 		,&left JCN ( jump if not 0 )
 		.Controller/button DEI
-		#80 AND ( isolate bit 7, RIGHT)
+		#80 AND ( isolate bit 7, RIGHT )
 		,&right JCN ( jump if not 0 )
 	( if no keys were pressed draw without changing )
 	,&draw JMP

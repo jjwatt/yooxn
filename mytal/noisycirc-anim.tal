@@ -86,14 +86,14 @@ BRK
 		.circle/x LDZ2 INC2 .circle/x STZ2 ( incr x )
 		( when d < 1, using LTS2 for signed less than )
 		.circle/d LDZ2 #0001 LTS2 ,&else JCN  ( if .circle/d < 1 go to else and skip decr y )
-		( when d >= 1)
+		( when d >= 1 )
 		.circle/y LDZ2 #0001 SUB2 .circle/y STZ2 ( decr y )
-		( d = d + (x - y) really ( x - y ) << 32 + d)
+		( d = d + (x - y) really ( x - y ) << 32 + d )
 		.circle/x LDZ2 .circle/y LDZ2 SUB2 #20 SFT2 ( subtract x - y then bitshift #20 )
 		.circle/d LDZ2 ADD2 .circle/d STZ2 ( add previous result to .circle/d )
 		;&end JMP2
 		&else
-			( d = d + (2x + 3 ) from Bresenham's algorithm )
+			( d = d + (2x + 3) from Bresenham's algorithm )
 			( our's is just d = d + x, advancing horizonatally but not adjusting y downward )
 			( bitshifted with 32 for 2^16 to scale to fixed point )
 			.circle/x LDZ2 #20 SFT2 .circle/d LDZ2 ADD2 .circle/d STZ2 ( x and add to d )

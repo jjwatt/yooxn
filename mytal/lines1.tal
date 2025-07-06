@@ -13,7 +13,7 @@
 %MOD { DUP2 DIV MUL SUB } ( a b -- a%b )
 %MOD2 { OVR2 OVR2 DIV2 MUL2 SUB2 } ( a b -- a%b )
 %HALF { #01 SFT } ( number -- number/2 )
-%HALF2 { #01 SFT2 } (number -- number/2 )
+%HALF2 { #01 SFT2 } ( number -- number/2 )
 %X-CENTER { .Screen/width DEI2 HALF2 } ( -- width )
 %Y-CENTER { .Screen/height DEI2 HALF2 } ( -- height )
 %BREAKPOINT { #010e DEO }
@@ -33,7 +33,7 @@
 	#01c0 .System/g DEO2
 	#2ce5 .System/b DEO2
 
-	( for x=0 x < width; x+=xstep)
+	( for x=0 x < width; x+=xstep )
 	&loop
 		.counter LDZ2 INC2 .counter STZ2
 	INC2 GTH2k ?&loop
@@ -56,7 +56,7 @@ BRK
 	( ,xstep #05 STR )
 	#0200 ( ,bline/x )
 	#0000 ( counter )
-	( for x=0 x < width; x+=1)
+	( for x=0 x < width; x+=1 )
 	&loop
 		( change y by random y step )
 		( draw a line stepwise but change y with ystep )
@@ -79,7 +79,7 @@ JMP2r
 	#0001 SUB2 .line/x0 STZ2
 	.line/y STZ2 .line/x STZ2
 	.line/x0 LDZ2 .line/x LDZ2 SUB2 ABS2 .line/dx STZ2 ( dx = abs(x0 - x) )
-	.line/y0 LDZ2 .line/y LDZ2 SUB2 ABS2 #0000 SWP2 SUB2 .line/dy STZ2 (dy = abs(y0 - y) )
+	.line/y0 LDZ2 .line/y LDZ2 SUB2 ABS2 #0000 SWP2 SUB2 .line/dy STZ2 ( dy = abs(y0 - y) )
 	#ffff #00 .line/x LDZ2 .line/x0 LDZ2 LTS2 #10 SFT2 ADD2 .line/sx STZ2 ( if x < x0 )
 	#ffff #00 .line/y LDZ2 .line/y0 LDZ2 LTS2 #10 SFT2 ADD2 .line/sy STZ2 ( if y < y0 )
 	.line/dx LDZ2 .line/dy LDZ2 ADD2 .line/e1 STZ2 ( dx + dy -> e1 )

@@ -11,7 +11,7 @@
 %8ADD-X { .Screen/x DEI2 #0010 ADD2 .Screen/x DEO2 } ( -- )
 %8ADD-Y { .Screen/y DEI2 #0010 ADD2 .Screen/y DEO2 } ( -- )
 %HALF { #01 SFT } ( number -- number/2 )
-%HALF2 { #01 SFT2 } (number -- number/2 )
+%HALF2 { #01 SFT2 } ( number -- number/2 )
 %INIT-X-CENTER { .Screen/width DEI2 HALF2 .Screen/x DEO2 } ( -- )
 %INIT-Y-CENTER { .Screen/width DEI2 HALF2 .Screen/y DEO2 } ( -- )
 ( main program )

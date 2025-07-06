@@ -20,7 +20,7 @@
 ( main program )
 |0100
       ( set system colors )
-      #2ce9 .System/r DEO2 (202, c1c, ece, 905 4-bit color )
+      #2ce9 .System/r DEO2 ( 202, c1c, ece, 905 4-bit color )
       #01c0 .System/g DEO2
       #2ce5 .System/b DEO2
 
