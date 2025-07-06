@@ -13,7 +13,7 @@
 %MOD { DUP2 DIV MUL SUB } ( a b -- a%b )
 %MOD2 { OVR2 OVR2 DIV2 MUL2 SUB2 } ( a b -- a%b )
 %HALF { #01 SFT } ( number -- number/2 )
-%HALF2 { #01 SFT2 } (number -- number/2 )
+%HALF2 { #01 SFT2 } ( number -- number/2 )
 %X-CENTER { .Screen/width DEI2 HALF2 } ( -- width )
 %Y-CENTER { .Screen/height DEI2 HALF2 } ( -- height )
 %BREAKPOINT { #010e DEO }
@@ -43,7 +43,7 @@
 	( #0001 #0100 #0200 #0100 #01 line-slow )
 	#01f0 ( width - borderx )
 	#0000 ( counter )
-	( for x=0 x < width; x+=1)
+	( for x=0 x < width; x+=1 )
 	&loop
 		( change y by random y step )
 		( draw a line stepwise but change y with ystep )

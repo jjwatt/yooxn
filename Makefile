@@ -27,9 +27,16 @@ UXNEMU_SRC := $(SRC_DIR)/uxn.c $(wildcard $(DEVICES_DIR)/*.c) $(SRC_DIR)/uxnemu.
 UXNASM := $(BIN_DIR)/uxnasm
 UXNEMU := $(BIN_DIR)/uxnemu
 
-.PHONY: all clean
+# Find all .tal files in the source directory
+MYTAL_SOURCES := $(wildcard $(MYTAL_SRC_DIR)/*.tal)
+# Generate the corresponding .rom target paths
+MYROMS := $(patsubst $(MYTAL_SRC_DIR)/%.tal,$(MYTAL_BUILD_DIR)/%.rom,$(MYTAL_SOURCES))
+
+.PHONY: all clean myroms
 
 all: $(UXNASM) $(UXNEMU)
+
+myroms: $(MYROMS)
 
 $(UXNASM): $(UXNASM_SRC) | $(BIN_DIR)
 	@echo "CC $< -> $@"

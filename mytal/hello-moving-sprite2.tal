@@ -41,7 +41,7 @@ BRK
 		#40 AND ( isolate bit 6, LEFT )
 		,&left JCN ( jump if not 0 )
 		.Controller/button DEI
-		#80 AND ( isolate bit 7, RIGHT)
+		#80 AND ( isolate bit 7, RIGHT )
 		,&right JCN ( jump if not 0 )
 	( if no keys were pressed draw without changing )
 	,&draw JMP
@@ -64,5 +64,6 @@ BRK
 	( draw sprite in fg with color 2 and transparency )
 	color-2 .Screen/sprite DEO
 BRK
+
 ( sprite data )
 @square ff81 8181 8181 81ff

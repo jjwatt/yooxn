@@ -6,3 +6,11 @@
 |00 @System  [ &vector $2 &pad $6  &r $2 &g $2 &b $2 ]
 |20 @Screen  [ &vector $2 &width $2 &height $2 &pad  $2 &x $2 &y $2
 	       &addr $2 &pixel $1 &sprite $1 ]
+
+|0000
+
+|0100
+	#0fe5 .System/r DEO2 
+	#0fc5 .System/g DEO2 
+	#0f25 .System/b DEO2
+BRK

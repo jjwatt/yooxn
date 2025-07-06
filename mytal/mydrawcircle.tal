@@ -48,7 +48,7 @@ BRK
 @draw-circle ( xc yc r color -- )
 	( store arguments in vars )
 	.color STZ .circle/radius STZ2 .circle/yc STZ2 .circle/xc STZ2
-	( set x,y to (0, radius) -- the top of the circle )
+	( set x,y to 0, radius -- the top of the circle )
 	#0000 .circle/x STZ2 .circle/radius LDZ2 .circle/y STZ2 ( set x to 0 and y to radius )
 	.circle/radius LDZ2 #10 SFT2 .circle/d STZ2 ( d, decision parameter, starting d is radius * 2 )
 
@@ -59,17 +59,17 @@ BRK
 		.circle/x LDZ2 INC2 .circle/x STZ2 ( incr x )
 		( when d < 1, using LTS2 for signed less than )
 		.circle/d LDZ2 #0001 LTS2 ,&else JCN  ( if .circle/d < 1 go to else and skip incr y )
-		( when d >= 1)
+		( when d >= 1 )
 		.circle/y LDZ2 #0001 SUB2 .circle/y STZ2 ( decr y )
-		( d = d + (x - y) really ( x - y ) << 32 + d)
+		( d = d + x - y really x - y << 32 + d )
 		.circle/x LDZ2 .circle/y LDZ2 SUB2 #20 SFT2 ( subtract x - y then bitshift #20 )
 		.circle/d LDZ2 ADD2 .circle/d STZ2 ( add previous result to .circle/d )
 		;&end JMP2
 		&else
-			( d = d + (2x + 3 ) from Bresenham's algorithm )
-			( our's is just d = d + x, advancing horizonatally but not adjusting y downward )
+			( d = d + 2x + 3 from Bresenham's algorithm )
+			( our's is just d = d + x advancing horizonatally but not adjusting y downward )
 			( bitshifted with 32 for 2^16 to scale to fixed point )
-			.circle/x LDZ2 #20 SFT2 .circle/d LDZ2 ADD2 .circle/d STZ2 ( x and add to d )
+			.circle/x LDZ2 #20 SFT2 .circle/d LDZ2 ADD2 .circle/d STZ2
 		&end
 		;&seg JSR2 ( draw )
 		.circle/y LDZ2 .circle/x LDZ2
@@ -77,7 +77,7 @@ BRK
 	JMP2r
 	&seg
 		( subroutine seg draws 8 symmetric points around the circles center )
-		( mirroring the current (x, y) in all 8 directions )
+		( mirroring the current x,y in all 8 directions )
 		.circle/xc LDZ2 .circle/x LDZ2 ADD2  ( x center + x )
 		.Screen/x DEO2  ( write out x coordinate )
 		.circle/yc LDZ2 .circle/y LDZ2 ADD2 ( y center + y )
