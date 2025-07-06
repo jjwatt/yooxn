@@ -49,9 +49,17 @@ $(UXNEMU): $(UXNEMU_SRC) | $(BIN_DIR)
 	@echo "CC uxnemu -> $@"
 	@$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS) $(UXNEMU_LDFLAGS)
 
+$(MYTAL_BUILD_DIR)/%.rom: $(MYTAL_SRC_DIR)/%.tal $(UXNASM) | $(MYTAL_BUILD_DIR)
+	@echo "UXNASM $< -> $@"
+	@$(UXNASM) $< $@
+
 # Rule to create the bin directory.
 # This is an "order-only prerequisite" for the executables.
 $(BIN_DIR):
+	@mkdir -p $@
+
+# Create mytal out dir for roms
+$(MYTAL_BUILD_DIR):
 	@mkdir -p $@
 
 # ============== Utility Rules ==============
