@@ -123,6 +123,12 @@ class Token:
         self.line = line
         self.value = value
 
+    def __repr__(self):
+        return f"Token(type={self.type.name}, value={self.value!r})"
+
+    def __str__(self):
+        return f"Token: {self.word} at line {self.line}"
+
     def print(self):
         """Print the token."""
         if isinstance(self.value, int):
