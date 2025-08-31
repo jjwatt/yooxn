@@ -17,4 +17,4 @@ options:
   --debug              Set loglevel to DEBUG
 ```
 
-I've tried it on many examples. It compiles most `tal` files now, even newer ones. Includes are implemented, but includes might be broken in Pass 2 with the latest changes. I'm going to look at those again next, along with cleaning up the code.
+I've tried it on many examples. It compiles most `tal` files now, even newer ones. Includes are implemented and work, too.
