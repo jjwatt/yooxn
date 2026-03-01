@@ -154,7 +154,7 @@ class Lexer:
             A new lexer object.
         """
         self.src = source
-        self.filename = Path(filename)
+        self.filename = Path(filename) if filename else None
         self.size = len(source)
         # Current position in the input
         self.cursor = 0
