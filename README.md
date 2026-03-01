@@ -1,12 +1,30 @@
 # yooxn
 WIP uxntal stuff
 
-## yooxnas.py
+## Installation
 
-uxntal assembler in Pyhon.
+You can install the package in editable mode:
+
+```bash
+pip install -e .
+```
+
+## Usage
+
+After installation, you can run the assembler directly:
+
+```bash
+yooxnas file.tal
+```
+
+Or via `python -m yooxn`:
+
+```bash
+python -m yooxn file.tal
+```
 
 ```
-usage: yooxnas.py [-h] [-o OUTPUT] [--debug] file
+usage: yooxnas [-h] [-o OUTPUT] [--debug] file
 
 positional arguments:
   file                 tal file to assemble
