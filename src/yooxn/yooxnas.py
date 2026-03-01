@@ -161,6 +161,7 @@ class Lexer:
         # Start position of the current token being scanned
         self.start = 0
         self.line = 1
+        self.start_of_word = True
 
     def _is_at_end(self):
         return self.cursor >= self.size
@@ -185,6 +186,10 @@ class Lexer:
                    value: int | str | None = None):
         if word is None:
             word = self.src[self.start:self.cursor]
+
+        # After any token is added, we are no longer at the start of a word
+        self.start_of_word = False
+
         log_parts = [
             f"Type={token_type.name}",
             f"Word='{word}'"
@@ -208,8 +213,10 @@ class Lexer:
         while not self._is_at_end():
             char = self._peek()
             if char in ' \t\r':
+                self.start_of_word = True
                 self._advance()
             elif char == '\n':
+                self.start_of_word = True
                 self.line += 1
                 self._advance()
             # Start block comment
@@ -236,12 +243,14 @@ class Lexer:
                                        f" line {comment_start_line}.",
                                        line=comment_start_line,
                                        filename=self.filename)
+                # After a comment, we treat it as if whitespace was seen
+                self.start_of_word = True
             else:
                 # Found a non-whitespace/non-comment char
                 break
 
     def _is_identifier_char(self, char: str) -> bool:
-        return char.isalnum() or char in ['_', '/', '-']
+        return char.isalnum() or char in ['_', '/', '-', '?', '!', ':', '<', '>', '.']
 
     def _is_hex_digit(self, char: str) -> bool:
         """Check if a char is a valid hexidecimal digit."""
@@ -259,29 +268,32 @@ class Lexer:
 
         char = self._advance()
 
-        match char:
-            # 1. Single-character tokens (Runes)
-            case '|': return self._add_token(TOKENTYPE.RUNE_PIPE)
-            case '$': return self._add_token(TOKENTYPE.RUNE_DOLLAR)
-            case '@': return self._add_token(TOKENTYPE.RUNE_AT)
-            case '&': return self._add_token(TOKENTYPE.RUNE_AMPERSAND)
-            case ',': return self._add_token(TOKENTYPE.RUNE_COMMA)
-            # case '_': return self._add_token(TOKENTYPE.RUNE_UNDERSCORE)
-            case '.': return self._add_token(TOKENTYPE.RUNE_PERIOD)
-            case '-': return self._add_token(TOKENTYPE.RUNE_MINUS)
-            case ';': return self._add_token(TOKENTYPE.RUNE_SEMICOLON)
-            case '=': return self._add_token(TOKENTYPE.RUNE_EQUAL)
-            case '!': return self._add_token(TOKENTYPE.RUNE_EXCLAIM)
-            case '?': return self._add_token(TOKENTYPE.RUNE_QUESTION)
-            case '#': return self._add_token(TOKENTYPE.RUNE_HASH)
-            case '\\': return self._add_token(TOKENTYPE.RUNE_BACKSLASH)
-            case '%': return self._add_token(TOKENTYPE.RUNE_PERCENT)
-            case '~': return self._add_token(TOKENTYPE.RUNE_TILDE)
-            case '{': return self._add_token(TOKENTYPE.RUNE_LBRACE)
-            case '}': return self._add_token(TOKENTYPE.RUNE_RBRACE)
-            case '[': return self._add_token(TOKENTYPE.RUNE_LBRACKET)
-            case ']': return self._add_token(TOKENTYPE.RUNE_RBRACKET)
+        # Runes only match at the start of a word, but & and { can follow
+        # other runes immediately (like ,&label or ?{ block }).
+        if self.start_of_word or char in ['&', '{']:
+            match char:
+                case '|': return self._add_token(TOKENTYPE.RUNE_PIPE)
+                case '$': return self._add_token(TOKENTYPE.RUNE_DOLLAR)
+                case '@': return self._add_token(TOKENTYPE.RUNE_AT)
+                case '&': return self._add_token(TOKENTYPE.RUNE_AMPERSAND)
+                case ',': return self._add_token(TOKENTYPE.RUNE_COMMA)
+                case '_': return self._add_token(TOKENTYPE.RUNE_UNDERSCORE)
+                case '.': return self._add_token(TOKENTYPE.RUNE_PERIOD)
+                case '-': return self._add_token(TOKENTYPE.RUNE_MINUS)
+                case ';': return self._add_token(TOKENTYPE.RUNE_SEMICOLON)
+                case '=': return self._add_token(TOKENTYPE.RUNE_EQUAL)
+                case '!': return self._add_token(TOKENTYPE.RUNE_EXCLAIM)
+                case '?': return self._add_token(TOKENTYPE.RUNE_QUESTION)
+                case '#': return self._add_token(TOKENTYPE.RUNE_HASH)
+                case '\\': return self._add_token(TOKENTYPE.RUNE_BACKSLASH)
+                case '%': return self._add_token(TOKENTYPE.RUNE_PERCENT)
+                case '~': return self._add_token(TOKENTYPE.RUNE_TILDE)
+                case '{': return self._add_token(TOKENTYPE.RUNE_LBRACE)
+                case '}': return self._add_token(TOKENTYPE.RUNE_RBRACE)
+                case '[': return self._add_token(TOKENTYPE.RUNE_LBRACKET)
+                case ']': return self._add_token(TOKENTYPE.RUNE_RBRACKET)
 
+        match char:
             case '"':
                 self.start = self.cursor
                 while not self._is_at_end():
@@ -290,15 +302,12 @@ class Lexer:
                     self._advance()
                 return self._add_token(TOKENTYPE.RAW_ASCII_CHUNK)
 
-            case c if c.isalnum() or c in ['_', '<', '>', '/', '.']:
-                # c is the first char.
-                # self.start points to it. self.cursor is 1 position after it.
-
+            case c if c.isalnum() or c in ['_', '<', '>', '/', '.', '-', '?', '!', ':']:
                 # Greedily consume all characters that can form an
                 # identifier/opcode word.
                 while (not self._is_at_end() and
                        (self._peek().isalnum()
-                        or self._peek() in ['_', '/', '-', '<', '>', '.'])):
+                        or self._peek() in ['_', '/', '-', '<', '>', '.', '?', '!', ':'])):
                     self._advance()
                 word = self.src[self.start:self.cursor]
 
@@ -753,6 +762,8 @@ class Parser:
                 self._handle_raw_ascii_chunk()
             case TOKENTYPE.RUNE_HASH:
                 self._handle_hash_literal()
+            case TOKENTYPE.RUNE_FORWARDSLASH:
+                self._advance()
             case TOKENTYPE.IDENTIFIER:
                 self._handle_identifier_token()
             # Literal Absolute pushes an absolute address short to label.
@@ -1052,7 +1063,7 @@ class Parser:
                 self._advance()
 
             if not (self.current_token
-                    and self.current_token.type == TOKENTYPE.IDENTIFIER):
+                    and (self.current_token.type == TOKENTYPE.IDENTIFIER or self.current_token.type == TOKENTYPE.HEX_LITERAL)):
                 raise SyntaxError(f"Expected label name or '{{'"
                                   f" after rune '{rune_token.word}'.",
                                   token=rune_token)
@@ -1165,30 +1176,48 @@ class Parser:
                 anonymous_label_end_name=target_label_name)
         else:
             # Operand is a standard label (&label or label)
+            is_sub_label_ref = False
             label_prefix = ""
-            if (self.current_token
-                    and self.current_token.type == TOKENTYPE.RUNE_AMPERSAND):
-                label_prefix = "&"
+            if (self.current_token and
+                    (self.current_token.type == TOKENTYPE.RUNE_AMPERSAND or
+                     self.current_token.type == TOKENTYPE.RUNE_FORWARDSLASH)):
+                label_prefix = self.current_token.word
+                is_sub_label_ref = True
                 self._advance()
+
             if not (self.current_token
-                    and self.current_token.type == TOKENTYPE.IDENTIFIER):
+                    and (self.current_token.type == TOKENTYPE.IDENTIFIER or self.current_token.type == TOKENTYPE.HEX_LITERAL)):
                 raise SyntaxError(f"Expected label name or '{{'"
                                   f" after rune '{rune_token.word}'.",
                                   token=rune_token)
+
             label_identifier_token = self.current_token
             base_label_name = label_identifier_token.word
-            displayed_label = f"{label_prefix}{base_label_name}"
+            target_label_name = ""
+            if is_sub_label_ref:
+                if not self.current_scope:
+                    raise SyntaxError("Sub-label reference "
+                                      f"'{label_prefix}{base_label_name}'"
+                                      "used outside of a parent '@' scope.",
+                                      token=label_identifier_token)
+                target_label_name = f"{self.current_scope}/{base_label_name}"
+            else:
+                target_label_name = base_label_name
+
             self.ir_stream.append(
                 IRLabelPlaceholder(
                     address=op_start_address,
                     size=placeholder_size,
-                    label_name=displayed_label,
+                    label_name=target_label_name,
                     ref_type=ref_type,
                     implied_opcode=None,
                     source_line=rune_token.line,
                     source_filepath=self._cur_ctx_filepath(),
                     placeholder_size=placeholder_size)
             )
+            displayed_label = base_label_name
+            if is_sub_label_ref:
+                displayed_label = f"{label_prefix}{base_label_name}"
             logger.debug(f"  Raw Addressing Rune Op:"
                          f" {rune_token.word}{displayed_label}, "
                          f"reserves {placeholder_size}-byte placeholder,"
