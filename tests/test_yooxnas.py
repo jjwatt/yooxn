@@ -1,7 +1,7 @@
 import logging
 import unittest
 
-import yooxnas
+from yooxn import yooxnas
 
 from pathlib import Path
 from unittest import skip
