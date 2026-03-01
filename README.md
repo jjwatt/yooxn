@@ -3,7 +3,7 @@ WIP uxntal stuff
 
 ## yooxnas.py
 
-I'm currently working on a uxntal assembler in Python. It's a 3 stage compiler with an intermediate representation :). Overkill, I know.
+uxntal assembler in Pyhon.
 
 ```
 usage: yooxnas.py [-h] [-o OUTPUT] [--debug] file
