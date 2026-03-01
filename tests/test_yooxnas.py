@@ -1,15 +1,17 @@
 import logging
-import unittest
-
-from yooxn import yooxnas
-
+import pytest
 from pathlib import Path
-from unittest import skip
-
+from yooxn import yooxnas
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+@pytest.fixture
+def test_out():
+    """Fixture to ensure the test_out directory exists."""
+    path = Path('test_out')
+    path.mkdir(exist_ok=True)
+    return path
 
 def load_and_parse_file(input_filename, output_filename):
     file_path = Path(input_filename)
@@ -30,74 +32,28 @@ def load_and_parse_file(input_filename, output_filename):
                 raise
             parser.write_rom(out_file_path)
         else:
-            print("Lexer failed. Parsing skipped.")
+            pytest.fail("Lexer failed. Parsing skipped.")
 
+def test_simple(test_out):
+    load_and_parse_file('examples/simple.tal', test_out / 'simple.rom')
 
-def build_out_path(in_path: Path) -> Path:
-    pass
+def test_hello(test_out):
+    load_and_parse_file('examples/hello.tal', test_out / 'hello.rom')
 
+def test_new_hello(test_out):
+    load_and_parse_file('examples/new_hello.tal', test_out / 'new_hello.rom')
 
-class TestSimple(unittest.TestCase):
-    def setUp(self):
-        self.test_out = Path('test_out')
-        self.test_out.mkdir(exist_ok=True)
-        self.simple = Path('examples/simple.tal')
+def test_fizzbuzz(test_out):
+    load_and_parse_file('examples/fizzbuzz.tal', test_out / 'fizzbuzz.rom')
 
-    def testSimple(self):
-        load_and_parse_file('examples/simple.tal',
-                            Path(self.test_out / 'simple.rom'))
+def test_new_fizzbuzz(test_out):
+    load_and_parse_file('examples/new_fizzbuzz.tal', test_out / 'new_fizzbuzz.rom')
 
-    def testHello(self):
-        load_and_parse_file('examples/hello.tal',
-                            Path(self.test_out / 'hello.rom'))
+def test_includes(test_out):
+    load_and_parse_file('examples/includes.tal', test_out / 'includes.rom')
 
-    def testNewHello(self):
-        load_and_parse_file('examples/new_hello.tal',
-                            'test_out/new_hello.rom')
+def test_math32(test_out):
+    load_and_parse_file('examples/math32.tal', test_out / 'math32.rom')
 
-
-class TestFizzBuzz(unittest.TestCase):
-    def setUp(self):
-        self.test_out = Path('test_out')
-        self.test_out.mkdir(exist_ok=True)
-
-    def testFizzBuzz(self):
-        load_and_parse_file('examples/fizzbuzz.tal',
-                            'test_out/fizzbuzz.rom')
-
-    def testNewFizzBuzz(self):
-        load_and_parse_file('examples/new_fizzbuzz.tal',
-                            'test_out/new_fizzbuzz.rom')
-
-class TestIncludes(unittest.TestCase):
-    def setUp(self):
-        self.test_out = Path('test_out')
-        self.test_out.mkdir(exist_ok=True)
-
-    def testIncludes(self):
-        load_and_parse_file('examples/includes.tal',
-                            'test_out/includes.rom')
-
-
-class TestComments(unittest.TestCase):
-    def setUp(self):
-        self.test_out = Path('test_out')
-        self.test_out.mkdir(exist_ok=True)
-
-    def testMath32(self):
-        load_and_parse_file('examples/math32.tal',
-                            'test_out/math32.rom')
-
-
-class TestMandelbrot(unittest.TestCase):
-    def setUp(self):
-        self.test_out = Path('test_out')
-        self.test_out.mkdir(exist_ok=True)
-
-    def testMandelbrot(self):
-        load_and_parse_file('examples/mandelbrot.tal',
-                            'test_out/mandelbrot.rom')
-
-
-if __name__ == "__main__":
-    unittest.main()
+def test_mandelbrot(test_out):
+    load_and_parse_file('examples/mandelbrot.tal', test_out / 'mandelbrot.rom')
