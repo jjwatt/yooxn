@@ -290,7 +290,7 @@ class Lexer:
                     self._advance()
                 return self._add_token(TOKENTYPE.RAW_ASCII_CHUNK)
 
-            case c if c.isalpha() or c in ['_', '<', '>', '/', '.']:
+            case c if c.isalnum() or c in ['_', '<', '>', '/', '.']:
                 # c is the first char.
                 # self.start points to it. self.cursor is 1 position after it.
 
@@ -314,15 +314,6 @@ class Lexer:
                         TOKENTYPE.IDENTIFIER,
                         word
                     )
-            # Hex Literals starting with a digit.
-            case c if c.isdigit():
-                # Consume all subsequent characters that are valid hex digits
-                # (0-9, a-f, A-F)
-                while (not self._is_at_end() and
-                       self._is_hex_digit(self._peek())):
-                    self._advance()
-                word = self.src[self.start:self.cursor]
-                return self._add_token(TOKENTYPE.HEX_LITERAL, word)
 
             # If none of the above matched the first character:
             case _:
@@ -762,8 +753,8 @@ class Parser:
                 self._handle_raw_ascii_chunk()
             case TOKENTYPE.RUNE_HASH:
                 self._handle_hash_literal()
-            case TOKENTYPE.HEX_LITERAL:
-                self._handle_standalone_hex_data()
+            case TOKENTYPE.IDENTIFIER:
+                self._handle_identifier_token()
             # Literal Absolute pushes an absolute address short to label.
             case TOKENTYPE.RUNE_SEMICOLON:
                 self._handle_literal_addressing_rune_op(
@@ -1441,7 +1432,7 @@ class Parser:
             # Consume '$'
             self._advance()
             if not (self.current_token
-                    and self.current_token.type == TOKENTYPE.HEX_LITERAL):
+                    and (self.current_token.type == TOKENTYPE.HEX_LITERAL or self.current_token.type == TOKENTYPE.IDENTIFIER)):
                 raise SyntaxError("Expected size (HEX_LITERAL) after '$'",
                                   token=dollar_token)
             size_hex_token = self.current_token
@@ -1623,7 +1614,7 @@ class Parser:
                 break  # Found the end of the block, exit the loop.
 
             # If not the end, it must be a hex literal.
-            if self.current_token.type == TOKENTYPE.HEX_LITERAL:
+            if self.current_token.type == TOKENTYPE.HEX_LITERAL or self.current_token.type == TOKENTYPE.IDENTIFIER:
                 # Delegate to the existing handler. It will update PC,
                 # generate IR, and advance the token.
                 self._handle_standalone_hex_data()

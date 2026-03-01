@@ -37,7 +37,7 @@ def test_lexer_ascii_chunk():
 def test_lexer_hex_literal():
     lexer = Lexer('12ab')
     token = lexer.scan_token()
-    assert token.type == TOKENTYPE.HEX_LITERAL
+    assert token.type == TOKENTYPE.IDENTIFIER
     assert token.word == '12ab'
 
 def test_lexer_opcode():
@@ -52,6 +52,12 @@ def test_lexer_comments():
     token = lexer.scan_token()
     assert token.type == TOKENTYPE.OPCODE
     assert token.word == 'DUP'
+
+def test_lexer_macro_name_with_digit():
+    lexer = Lexer('8ADD-X')
+    token = lexer.scan_token()
+    assert token.type == TOKENTYPE.IDENTIFIER
+    assert token.word == '8ADD-X'
 
 def test_lexer_whitespace():
     lexer = Lexer('  \n  DUP')
