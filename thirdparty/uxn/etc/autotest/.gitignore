@@ -1,3 +1,5 @@
 /autotest
 /fix_fft.c
 /test.ppm
+__pycache__/
+*.pyc
