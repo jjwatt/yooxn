@@ -16,4 +16,17 @@ yooxnas = "yooxn.yooxnas:main"
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
+    "ruff>=0.9.7",
 ]
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B"]
+ignore = []
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

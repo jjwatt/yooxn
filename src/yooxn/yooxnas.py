@@ -3,11 +3,9 @@
 import argparse
 import logging
 import sys
-
 from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import Path
-from typing import Optional
 
 logging.basicConfig(level=logging.INFO,
                     format="%(levelname)s - %(message)s")
@@ -270,28 +268,48 @@ class Lexer:
 
         # Runes only match at the start of a word, but & and { can follow
         # other runes immediately (like ,&label or ?{ block }).
-        if self.start_of_word or char in ['&', '{']:
+        if self.start_of_word or char in ["&", "{"]:
             match char:
-                case '|': return self._add_token(TOKENTYPE.RUNE_PIPE)
-                case '$': return self._add_token(TOKENTYPE.RUNE_DOLLAR)
-                case '@': return self._add_token(TOKENTYPE.RUNE_AT)
-                case '&': return self._add_token(TOKENTYPE.RUNE_AMPERSAND)
-                case ',': return self._add_token(TOKENTYPE.RUNE_COMMA)
-                case '_': return self._add_token(TOKENTYPE.RUNE_UNDERSCORE)
-                case '.': return self._add_token(TOKENTYPE.RUNE_PERIOD)
-                case '-': return self._add_token(TOKENTYPE.RUNE_MINUS)
-                case ';': return self._add_token(TOKENTYPE.RUNE_SEMICOLON)
-                case '=': return self._add_token(TOKENTYPE.RUNE_EQUAL)
-                case '!': return self._add_token(TOKENTYPE.RUNE_EXCLAIM)
-                case '?': return self._add_token(TOKENTYPE.RUNE_QUESTION)
-                case '#': return self._add_token(TOKENTYPE.RUNE_HASH)
-                case '\\': return self._add_token(TOKENTYPE.RUNE_BACKSLASH)
-                case '%': return self._add_token(TOKENTYPE.RUNE_PERCENT)
-                case '~': return self._add_token(TOKENTYPE.RUNE_TILDE)
-                case '{': return self._add_token(TOKENTYPE.RUNE_LBRACE)
-                case '}': return self._add_token(TOKENTYPE.RUNE_RBRACE)
-                case '[': return self._add_token(TOKENTYPE.RUNE_LBRACKET)
-                case ']': return self._add_token(TOKENTYPE.RUNE_RBRACKET)
+                case "|":
+                    return self._add_token(TOKENTYPE.RUNE_PIPE)
+                case "$":
+                    return self._add_token(TOKENTYPE.RUNE_DOLLAR)
+                case "@":
+                    return self._add_token(TOKENTYPE.RUNE_AT)
+                case "&":
+                    return self._add_token(TOKENTYPE.RUNE_AMPERSAND)
+                case ",":
+                    return self._add_token(TOKENTYPE.RUNE_COMMA)
+                case "_":
+                    return self._add_token(TOKENTYPE.RUNE_UNDERSCORE)
+                case ".":
+                    return self._add_token(TOKENTYPE.RUNE_PERIOD)
+                case "-":
+                    return self._add_token(TOKENTYPE.RUNE_MINUS)
+                case ";":
+                    return self._add_token(TOKENTYPE.RUNE_SEMICOLON)
+                case "=":
+                    return self._add_token(TOKENTYPE.RUNE_EQUAL)
+                case "!":
+                    return self._add_token(TOKENTYPE.RUNE_EXCLAIM)
+                case "?":
+                    return self._add_token(TOKENTYPE.RUNE_QUESTION)
+                case "#":
+                    return self._add_token(TOKENTYPE.RUNE_HASH)
+                case "\\":
+                    return self._add_token(TOKENTYPE.RUNE_BACKSLASH)
+                case "%":
+                    return self._add_token(TOKENTYPE.RUNE_PERCENT)
+                case "~":
+                    return self._add_token(TOKENTYPE.RUNE_TILDE)
+                case "{":
+                    return self._add_token(TOKENTYPE.RUNE_LBRACE)
+                case "}":
+                    return self._add_token(TOKENTYPE.RUNE_RBRACE)
+                case "[":
+                    return self._add_token(TOKENTYPE.RUNE_LBRACKET)
+                case "]":
+                    return self._add_token(TOKENTYPE.RUNE_RBRACKET)
 
         match char:
             case '"':
@@ -305,9 +323,11 @@ class Lexer:
             case c if c.isalnum() or c in ['_', '<', '>', '/', '.', '-', '?', '!', ':']:
                 # Greedily consume all characters that can form an
                 # identifier/opcode word.
-                while (not self._is_at_end() and
-                       (self._peek().isalnum()
-                        or self._peek() in ['_', '/', '-', '<', '>', '.', '?', '!', ':'])):
+                while not self._is_at_end() and (
+                    self._peek().isalnum()
+                    or self._peek()
+                    in ["_", "/", "-", "<", ">", ".", "?", "!", ":"]
+                ):
                     self._advance()
                 word = self.src[self.start:self.cursor]
 
@@ -391,7 +411,7 @@ class IRLabelPlaceholder(IRNode):
     ref_type: str
     """LIT2_ABS, LIT2_REL."""
     placeholder_size: int
-    implied_opcode: Optional[int] = None
+    implied_opcode: int | None = None
     """Byte for LIT2, JMI, LIT or None for raw."""
 
 
@@ -508,25 +528,26 @@ class Parser:
         logger.debug(f"Preparing to write ROM to {output_filename}.")
 
         # The start address for program data in a UXN ROM
-        ROM_START_ADDRESS = 0x0100
+        rom_start_address = 0x0100
 
         full_rom_image = self.rom_data
-        if len(full_rom_image) <= ROM_START_ADDRESS:
+        if len(full_rom_image) <= rom_start_address:
             logging.warning(f"No program data found at or after"
-                            f" address 0x{ROM_START_ADDRESS:04x}."
+                            f" address 0x{rom_start_address:04x}."
                             " Creating an empty ROM file.")
             bytes_to_write = bytearray()
         else:
             # Slice to only get data from 0x0100 on
-            bytes_to_write = full_rom_image[ROM_START_ADDRESS:]
+            bytes_to_write = full_rom_image[rom_start_address:]
         try:
             with open(output_filename, "wb") as rf:
                 rf.write(bytes_to_write)
                 logger.info(f"Successfully wrote {len(bytes_to_write)}"
                             f" bytes to {output_filename}.")
-        except IOError as e:
-            raise ParsingError(f"Failed to write ROM file '{output_filename}':"
-                               f" {e}")
+        except OSError as e:
+            raise ParsingError(
+                f"Failed to write ROM file '{output_filename}': {e}"
+            ) from e
 
     def _process_token_stream(self):
         try:
@@ -944,10 +965,11 @@ class Parser:
         value_str = self.current_token.word
         try:
             val = int(value_str, 16)
-        except ValueError:
-            raise SyntaxError(f"Invalid hex value '{value_str}'"
-                              f" for padding rune '{rune_char}'",
-                              token=self.current_token)
+        except ValueError as e:
+            raise SyntaxError(
+                f"Invalid hex value '{value_str}' for padding rune '{rune_char}'",
+                token=self.current_token,
+            ) from e
 
         # Absolute padding
         if rune_char == '|':
@@ -1062,8 +1084,13 @@ class Parser:
                 is_sub_label_ref = True
                 self._advance()
 
-            if not (self.current_token
-                    and (self.current_token.type == TOKENTYPE.IDENTIFIER or self.current_token.type == TOKENTYPE.HEX_LITERAL)):
+            if not (
+                self.current_token
+                and (
+                    self.current_token.type == TOKENTYPE.IDENTIFIER
+                    or self.current_token.type == TOKENTYPE.HEX_LITERAL
+                )
+            ):
                 raise SyntaxError(f"Expected label name or '{{'"
                                   f" after rune '{rune_token.word}'.",
                                   token=rune_token)
@@ -1185,8 +1212,13 @@ class Parser:
                 is_sub_label_ref = True
                 self._advance()
 
-            if not (self.current_token
-                    and (self.current_token.type == TOKENTYPE.IDENTIFIER or self.current_token.type == TOKENTYPE.HEX_LITERAL)):
+            if not (
+                self.current_token
+                and (
+                    self.current_token.type == TOKENTYPE.IDENTIFIER
+                    or self.current_token.type == TOKENTYPE.HEX_LITERAL
+                )
+            ):
                 raise SyntaxError(f"Expected label name or '{{'"
                                   f" after rune '{rune_token.word}'.",
                                   token=rune_token)
@@ -1275,13 +1307,14 @@ class Parser:
         self.filepath_stack.append(Path(filepath_str))
         logger.debug(f"filepath_stack: {self.filepath_stack}")
         try:
-            with open(filepath_str, "r") as inc_file:
+            with open(filepath_str) as inc_file:
                 inc_source = inc_file.read()
-        except FileNotFoundError:
-            raise ParsingError(f"Include file not found:"
-                               f" '{filepath_str}'",
-                               line=include_rune_token.line,
-                               filename=self._cur_ctx_filepath())
+        except FileNotFoundError as e:
+            raise ParsingError(
+                f"Include file not found: '{filepath_str}'",
+                line=include_rune_token.line,
+                filename=self._cur_ctx_filepath(),
+            ) from e
         logger.debug(f"Lexing included file: {filepath_str}")
         inc_lexer = Lexer(inc_source, filename=filepath_str)
         inc_tokens = inc_lexer.scan_all_tokens()
@@ -1354,9 +1387,10 @@ class Parser:
         try:
             # Test conversion to see if it's a valid number.
             val_int = int(val, 16)
-        except ValueError:
-            raise SyntaxError(f"Invalid hex value '{val}'"
-                              f" after '#'", token=self.current_token)
+        except ValueError as e:
+            raise SyntaxError(
+                f"Invalid hex value '{val}' after '#'", token=self.current_token
+            ) from e
 
         val_len = len(val)
         size = 0
@@ -1434,11 +1468,15 @@ class Parser:
         ampersand_token = self.current_token
         # Consume '&'
         self._advance()
-        if not (self.current_token
-                and self.current_token.type == TOKENTYPE.IDENTIFIER):
-            raise SyntaxError("Expected sub-label name after '&'"
-                              " for parent '%s'." % parent_label_name,
-                              token=ampersand_token)
+        if not (
+            self.current_token
+            and self.current_token.type == TOKENTYPE.IDENTIFIER
+        ):
+            raise SyntaxError(
+                f"Expected sub-label name after '&' for parent '{parent_label_name}'.",
+                token=ampersand_token,
+            )
+
         sub_label_token = self.current_token
         sub_label_name = sub_label_token.word
         full_sub_label_name = f'{parent_label_name}/{sub_label_name}'
@@ -1460,8 +1498,13 @@ class Parser:
             dollar_token = self.current_token
             # Consume '$'
             self._advance()
-            if not (self.current_token
-                    and (self.current_token.type == TOKENTYPE.HEX_LITERAL or self.current_token.type == TOKENTYPE.IDENTIFIER)):
+            if not (
+                self.current_token
+                and (
+                    self.current_token.type == TOKENTYPE.HEX_LITERAL
+                    or self.current_token.type == TOKENTYPE.IDENTIFIER
+                )
+            ):
                 raise SyntaxError("Expected size (HEX_LITERAL) after '$'",
                                   token=dollar_token)
             size_hex_token = self.current_token
@@ -1469,10 +1512,12 @@ class Parser:
                 size = int(size_hex_token.word, 16)
                 if size < 0:
                     raise ValueError("Size cannot be negative.")
-            except ValueError:
-                raise SyntaxError("Invalid size %s for sub-label %s" % (
-                    size_hex_token.word, sub_label_token.word),
-                                  token=size_hex_token)
+            except ValueError as e:
+                raise SyntaxError(
+                    f"Invalid size {size_hex_token.word} "
+                    f"for sub-label {sub_label_token.word}",
+                    token=size_hex_token,
+                ) from e
             logger.debug("    Sub-label '%s/%s' field occupies %s byte(s).",
                          parent_label_name, sub_label_token.word, size)
             logger.debug("       Advancing PC.")
@@ -1595,9 +1640,10 @@ class Parser:
                 # High byte, then low byte.
                 byte_values.append((val_int >> 8) & 0xFF)
                 byte_values.append(val_int & 0xFF)
-        except ValueError:
-            raise SyntaxError(f"Invalid hex value for raw data: '{data_word}'",
-                              token=data_token)
+        except ValueError as e:
+            raise SyntaxError(
+                f"Invalid hex value for raw data: '{data_word}'", token=data_token
+            ) from e
         # Create and append the IR node.
         self.ir_stream.append(
             IRRawBytes(
@@ -1643,7 +1689,10 @@ class Parser:
                 break  # Found the end of the block, exit the loop.
 
             # If not the end, it must be a hex literal.
-            if self.current_token.type == TOKENTYPE.HEX_LITERAL or self.current_token.type == TOKENTYPE.IDENTIFIER:
+            if (
+                self.current_token.type == TOKENTYPE.HEX_LITERAL
+                or self.current_token.type == TOKENTYPE.IDENTIFIER
+            ):
                 # Delegate to the existing handler. It will update PC,
                 # generate IR, and advance the token.
                 self._handle_standalone_hex_data()
@@ -1920,10 +1969,10 @@ def main():
     args = parse_args()
     if args.debug:
         logger.setLevel(logging.DEBUG)
-        logger.debug('Python v%s', ('%d.%d.%d' % sys.version_info[:3]))
+        logger.debug("Python v%s.%s.%s", *sys.version_info[:3])
     if args.file:
         file_path = Path(args.file)
-        with open(args.file, 'r') as asmfile:
+        with open(args.file) as asmfile:
             source_code = asmfile.read()
             lexer = Lexer(source_code, filename=file_path)
             tokens = lexer.scan_all_tokens()

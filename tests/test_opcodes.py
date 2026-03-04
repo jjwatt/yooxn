@@ -1,5 +1,7 @@
 import pytest
+
 from yooxn.yooxnas import get_opcode_byte
+
 
 @pytest.mark.parametrize("mnemonic, expected", [
     ("BRK", 0x00),

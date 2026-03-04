@@ -1,6 +1,8 @@
 import logging
-import pytest
 from pathlib import Path
+
+import pytest
+
 from yooxn import yooxnas
 
 logging.basicConfig(level=logging.DEBUG)
@@ -16,7 +18,7 @@ def test_out():
 def load_and_parse_file(input_filename, output_filename):
     file_path = Path(input_filename)
     out_file_path = Path(output_filename)
-    with open(file_path, 'r') as asmfile:
+    with open(file_path) as asmfile:
         source_code = asmfile.read()
         lexer = yooxnas.Lexer(source_code, filename=file_path)
         tokens = lexer.scan_all_tokens()

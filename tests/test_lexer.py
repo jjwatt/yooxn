@@ -1,5 +1,7 @@
 import pytest
-from yooxn.yooxnas import Lexer, TOKENTYPE
+
+from yooxn.yooxnas import TOKENTYPE, Lexer
+
 
 def test_lexer_ascii_chunk():
     lexer = Lexer('"hello')
