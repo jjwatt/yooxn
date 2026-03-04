@@ -4,6 +4,7 @@
 CC      := cc
 PYTEST  := uv run pytest
 RUFF    := uv run ruff
+MYPY    := uv run mypy
 YOOXNAS := uv run yooxnas
 
 BUILD_DIR       := build
@@ -34,7 +35,7 @@ YOOXN_ROMS     := $(patsubst $(MYTAL_SRC_DIR)/%.tal,$(MYTAL_BUILD_DIR)/%.yo.rom,
 # --- Primary Targets ---
 
 .DEFAULT_GOAL := all
-.PHONY: all clean test check tools myroms yo-myroms lint format
+.PHONY: all clean test check tools myroms yo-myroms lint format typecheck
 
 # Build everything: tools and both sets of ROMs
 all: tools myroms yo-myroms
@@ -54,11 +55,15 @@ test:
 	@$(PYTEST)
 
 # Lint and test
-check: lint test
+check: lint typecheck test
 
 lint:
 	@echo ">> Linting with ruff"
 	@$(RUFF) check src tests
+
+typecheck:
+	@echo ">> Type checking with mypy"
+	@$(MYPY) src
 
 format:
 	@echo ">> Formatting with ruff"

@@ -17,7 +17,16 @@ yooxnas = "yooxn.yooxnas:main"
 dev = [
     "pytest>=9.0.2",
     "ruff>=0.9.7",
+    "mypy>=1.15.0",
 ]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+warn_unreachable = true
+pretty = true
+show_column_numbers = true
+show_error_codes = true
 
 [tool.ruff]
 line-length = 88
