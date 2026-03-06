@@ -1783,21 +1783,24 @@ class Parser:
         # Collect Macro Body Tokens
         macro_body_tokens: list[Token] = []
         nesting_depth = 1
-        while self.current_token is not None and self.current_token.type != TOKENTYPE.EOF:
+        while (tok := self.current_token) is not None and tok.type != TOKENTYPE.EOF:
             # Disallow nested macro definitions
-            if self.current_token.type == TOKENTYPE.RUNE_PERCENT:
-                raise SyntaxError(
-                    f"Nested macro definitions are not allowed: '{macro_name}'.",
-                    token=self.current_token,
-                )
-            if self.current_token.type == TOKENTYPE.RUNE_LBRACE:
-                nesting_depth += 1
-            elif self.current_token.type == TOKENTYPE.RUNE_RBRACE:
-                nesting_depth -= 1
-                if nesting_depth == 0:
-                    # Matching RBRACE for macro body
-                    self._advance()
-                    break
+            match tok.type:
+                case TOKENTYPE.RUNE_PERCENT:
+                    raise SyntaxError(
+                        f"Nested macro definitions are not allowed: '{macro_name}'.",
+                        token=tok,
+                    )
+                case TOKENTYPE.RUNE_LBRACE:
+                    nesting_depth += 1
+                case TOKENTYPE.RUNE_RBRACE:
+                    nesting_depth -= 1
+                    if nesting_depth == 0:
+                        # Matching RBRACE for macro body
+                        self._advance()
+                        break
+                case _:
+                    pass
             macro_body_tokens.append(self.current_token)
             self._advance()
         if nesting_depth != 0:
