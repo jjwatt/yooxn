@@ -764,26 +764,26 @@ class Parser:
 
             # Dispatch based on IR Node
             match ir:
-                case inst if isinstance(inst, IRPadding):
+                case IRPadding() as inst:
                     # The _handle_ir_padding call above already padded up to
                     # ir_node.address. Now, we must ensure padding extends from
                     # there to the IRPadding node's target_address.
                     current_rom_len = len(self.rom_data)
-                    if ir.target_address > current_rom_len:
+                    if inst.target_address > current_rom_len:
                         final_padding = ir.target_address - current_rom_len
-                        logger.debug(f"  PASS2: IRPadding node applying" f" {final_padding} zero bytes to" f" reach 0x{ir.target_address:04x}")
+                        logger.debug(f"  PASS2: IRPadding node applying" f" {final_padding} zero bytes to" f" reach 0x{inst.target_address:04x}")
                         self.rom_data.extend([0x00] * final_padding)
                 # The case where target_address < current_rom_len was already
                 # flagged as a warning/error by the sanity check in
                 # _handle_ir_padding if ir_node.address was also less. The
                 # logic inside _handle_ir_padding handles this desync error.
-                case inst if isinstance(inst, IRRawBytes):
+                case IRRawBytes() as inst:
                     self.rom_data.extend(inst.byte_values)
                     self._pp2(inst)
-                case inst if isinstance(inst, IROpcode):
+                case IROpcode() as inst:
                     self.rom_data.append(inst.byte_value)
                     self._pp2(inst)
-                case inst if isinstance(inst, IRLabelPlaceholder):
+                case IRLabelPlaceholder() as inst:
                     self._handle_ir_label_placeholder(ir, symbol_table)
                 case _:
                     raise NotImplementedError
@@ -1195,8 +1195,6 @@ class Parser:
                 )
 
             label_identifier_token = self.current_token
-            if label_identifier_token is None:
-                return
             base_label_name = label_identifier_token.word
             target_label_name = ""
             if is_sub_label_ref:
@@ -1447,8 +1445,6 @@ class Parser:
                 token=ampersand_token,
             )
         sub_label_token = self.current_token
-        if sub_label_token is None:
-            return
         sub_label_name = sub_label_token.word
         full_sub_label_name = f"{parent_label_name}/{sub_label_name}"
 
@@ -1462,18 +1458,13 @@ class Parser:
         self._advance()
 
         # Check for optional $size
-        rune_dollar = self.current_token and self.current_token.type == TOKENTYPE.RUNE_DOLLAR
-        if rune_dollar:
-            dollar_token = self.current_token
-            if dollar_token is None:
-                return
+        if (tok := self.current_token) and tok.type == TOKENTYPE.RUNE_DOLLAR:
+            dollar_token = tok
             # Consume '$'
             self._advance()
-            if not (self.current_token and (self.current_token.type == TOKENTYPE.HEX_LITERAL or self.current_token.type == TOKENTYPE.IDENTIFIER)):
+            if not ((t := self.current_token) and (t.type == TOKENTYPE.HEX_LITERAL or t.type == TOKENTYPE.IDENTIFIER)):
                 raise SyntaxError("Expected size (HEX_LITERAL) after '$'", token=dollar_token)
-            size_hex_token = self.current_token
-            if size_hex_token is None:
-                return
+            size_hex_token = t
             try:
                 size = int(size_hex_token.word, 16)
                 if size < 0:
@@ -1519,8 +1510,6 @@ class Parser:
         if not (self.current_token and self.current_token.type == TOKENTYPE.IDENTIFIER):
             raise SyntaxError("Expected parent label name after '@'.", token=directive_token)
         parent_label_token = self.current_token
-        if parent_label_token is None:
-            return
         parent_label_name = parent_label_token.word
         self.current_scope = parent_label_name
         logger.debug(f"  Scope set to '{self.current_scope}'")
@@ -1532,7 +1521,7 @@ class Parser:
             logger.debug(f'Define label "{parent_label_name}" at ' f"0x{self.current_address:04x} " f"(Line {parent_label_token.line})")
         # Consume parent label identifier
         self._advance()
-        while self.current_token and self.current_token.type == TOKENTYPE.RUNE_AMPERSAND:
+        while (t := self.current_token) and t.type == TOKENTYPE.RUNE_AMPERSAND:
             self._handle_sub_label_field(parent_label_name)
 
     def _handle_standalone_sub_label(self) -> None:
@@ -1550,8 +1539,6 @@ class Parser:
         if not (self.current_token and self.current_token.type == TOKENTYPE.IDENTIFIER):
             raise SyntaxError("Expected sub-label name (IDENTIFIER) after standalone '&'.", token=ampersand_token)
         sub_label_token = self.current_token
-        if sub_label_token is None:
-            return
         sub_label_name = sub_label_token.word
 
         if not self.current_scope:
@@ -1768,8 +1755,6 @@ class Parser:
         if not (self.current_token and self.current_token.type == TOKENTYPE.IDENTIFIER):
             raise SyntaxError("Expected macro name (IDENTIFIER) after '%'.", token=percent_token)
         macro_name_token = self.current_token
-        if macro_name_token is None:
-            return
         macro_name = macro_name_token.word
         # Validate macro_name.
         # TODO: More validation. uxnasm.c checks for hex, opcode, rune-start
@@ -1786,16 +1771,14 @@ class Parser:
         # Consume the macro name IDENTIFIER
         self._advance()
 
+        token = self.current_token
         # Expect and consume opening brace '{'
-        if not (self.current_token and self.current_token.type == TOKENTYPE.RUNE_LBRACE):
-            if self.current_token:
-                token = self.current_token
-            else:
-                token = macro_name_token
-            raise SyntaxError(f"Expected '{{' to start macro body for '{macro_name}'.", token=token)
-        lbrace_token = self.current_token
-        if lbrace_token is None:
-            return
+        if token is None or token.type != TOKENTYPE.RUNE_LBRACE:
+            err_token = token if token else macro_name_token
+            raise SyntaxError(f"Expected '{{' to start macro body for '{macro_name}'.", token=err_token)
+
+        lbrace_token = token
+
         self._advance()
         # Collect Macro Body Tokens
         macro_body_tokens: list[Token] = []
