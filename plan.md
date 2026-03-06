@@ -3,7 +3,7 @@
 This document tracks planned improvements and features for the `yooxn` project.
 
 ## 1. Code Quality & Maintenance
-- [ ] **Complete Type Hinting**: Audit `src/yooxn/yooxnas.py` and ensure 100% type hint coverage. 
+- [x] **Complete Type Hinting**: Audit `src/yooxn/yooxnas.py` and ensure 100% type hint coverage. 
     - Currently, some internal methods and IR nodes have partial hinting.
 - [x] **Linting & Formatting**: Integrate `ruff` into the project and `Makefile` to enforce consistent style.
 - [ ] **Docstring Audit**: Standardize docstrings across all classes and methods (preferring Google style).
