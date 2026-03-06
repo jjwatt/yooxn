@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""uxntal assembler."""
+"""A multi-pass assembler for the uxntal language.
+
+This module provides a complete implementation of a uxntal assembler, including
+lexical analysis, intermediate representation generation (Pass 1), and final
+ROM generation (Pass 2). It supports macros, sub-labels, and relative addressing.
+"""
 
 import argparse
 import logging
@@ -53,7 +58,18 @@ _BASE_OPCODE_MAP = {name: i for i, name in enumerate(_BASE_OPCODES_LIST)}
 
 
 def get_opcode_byte(mnemonic: str) -> int | None:
-    """Get the uxn opcode byte by name."""
+    """Calculate the 8-bit opcode byte for a given mnemonic.
+
+    This includes handling the base opcode and OR-ing any mode bits (2, r, k).
+    LIT is handled as a special case where its default state is 0x80 (LITk).
+
+    Args:
+        mnemonic: The string representation of the opcode (e.g., "ADD2", "LIT2r").
+
+    Returns:
+        The 8-bit opcode value, or None if the mnemonic is invalid.
+
+    """
     if mnemonic == "BRK":
         return 0x00
 
@@ -98,7 +114,7 @@ def get_opcode_byte(mnemonic: str) -> int | None:
 
 
 class TOKENTYPE(Enum):
-    """Token Type."""
+    """Enumeration of recognized token types in uxntal."""
 
     RUNE_PIPE = auto()  # |
     RUNE_DOLLAR = auto()
@@ -136,7 +152,16 @@ class TOKENTYPE(Enum):
 
 
 class Token:
-    """Tokens emitted by the Lexer."""
+    """Represents a single unit of source code emitted by the Lexer.
+
+    Attributes:
+        type: The TOKENTYPE classification of this token.
+        word: The literal string extracted from the source.
+        line: The 1-based line number where the token was found.
+        value: An optional numeric or string value associated with the token
+             (e.g., the byte value for an OPCODE).
+
+    """
 
     def __init__(
         self,
@@ -145,20 +170,22 @@ class Token:
         line: int,
         value: int | str | None = None,
     ) -> None:
-        """Initialize a token of token_type."""
+        """Initialize a new Token instance."""
         self.type = token_type
         self.word = word
         self.line = line
         self.value = value
 
     def __repr__(self) -> str:
+        """Return a developer-friendly string representation of the token."""
         return f"Token(type={self.type.name}, value={self.value!r})"
 
     def __str__(self) -> str:
+        """Return a user-friendly string representation of the token."""
         return f"Token: {self.word} at line {self.line}"
 
     def print(self) -> None:
-        """Print the token."""
+        """Log a detailed debug representation of the token."""
         if isinstance(self.value, int):
             value_str = f", Value: {self.value:#04x}"
         elif self.value is not None:
@@ -166,21 +193,24 @@ class Token:
         else:
             value_str = ""
         logger.debug(
-            f"'{self.word}': [TOKEN_{self.type.name}{value_str}]" f" (Line {self.line})"
+            f"'{self.word}': [TOKEN_{self.type.name}{value_str}] (Line {self.line})"
         )
 
 
 class Lexer:
-    """Lexer for uxntal."""
+    """Lexer for uxntal source code.
+
+    Perform lexical analysis, converting raw source strings into a sequence
+    of Token instances for the Parser. Track line numbers and word boundaries.
+    """
 
     def __init__(self, source: str, filename: str | Path | None = None) -> None:
-        """Initialize a lexer.
+        """Initialize a new lexer instance.
 
         Args:
-            src - str - The source code.
+            source: The raw Tal source code to tokenize.
+            filename: Optional path to the source file for error reporting.
 
-        Return:
-            A new lexer object.
         """
         self.src = source
         self.filename = Path(filename) if filename else None
@@ -193,19 +223,23 @@ class Lexer:
         self.start_of_word = True
 
     def _is_at_end(self) -> bool:
+        """Check if the cursor has reached the end of the source string."""
         return self.cursor >= self.size
 
     def _advance(self) -> str:
+        """Consume and return the next character from the source."""
         char = self.src[self.cursor]
         self.cursor += 1
         return char
 
     def _peek(self) -> str:
+        """Return the next character without consuming it."""
         if self._is_at_end():
             return "\0"
         return self.src[self.cursor]
 
     def _peek_next(self) -> str:
+        """Return the character after the next one without consuming it."""
         if self.cursor + 1 >= self.size:
             return "\0"
         return self.src[self.cursor + 1]
@@ -216,6 +250,7 @@ class Lexer:
         word: str | None = None,
         value: int | str | None = None,
     ) -> Token:
+        """Create and return a new Token based on current lexer state."""
         if word is None:
             word = self.src[self.start : self.cursor]
 
@@ -236,7 +271,7 @@ class Lexer:
         return Token(token_type, word, self.line, value)
 
     def _skip_whitespace_and_comments(self) -> None:
-        """Skip whitespace and comments in the tokenizer."""
+        """Skip over whitespace and nested comment blocks in the source."""
         while not self._is_at_end():
             char = self._peek()
             if char in " \t\r":
@@ -278,6 +313,7 @@ class Lexer:
                 break
 
     def _is_identifier_char(self, char: str) -> bool:
+        """Check if a character is valid within a Tal identifier."""
         return char.isalnum() or char in [
             "_",
             "/",
@@ -291,14 +327,14 @@ class Lexer:
         ]
 
     def _is_hex_digit(self, char: str) -> bool:
-        """Check if a char is a valid hexidecimal digit."""
+        """Check if a character is a valid hexadecimal digit."""
         if not char:
             return False
         char_lower = char.lower()
         return "0" <= char_lower <= "9" or "a" <= char_lower <= "f"
 
     def scan_token(self) -> Token:
-        """Scan a single token."""
+        """Scan and return the next token from the source."""
         self._skip_whitespace_and_comments()
         self.start = self.cursor
         if self._is_at_end():
@@ -365,7 +401,9 @@ class Lexer:
             case c if self._is_identifier_char(c):
                 # Greedily consume all characters that can form an
                 # identifier/opcode word.
-                while not self._is_at_end() and (self._is_identifier_char(self._peek())):
+                while not self._is_at_end() and (
+                    self._is_identifier_char(self._peek())
+                ):
                     self._advance()
                 word = self.src[self.start : self.cursor]
 
@@ -382,7 +420,7 @@ class Lexer:
                 return self._add_token(TOKENTYPE.ILLEGAL, char)
 
     def scan_all_tokens(self) -> list[Token]:
-        """Scan all tokens in the lexer."""
+        """Scan the entire source and return a list of tokens until EOF."""
         tokens = []
         while True:
             token = self.scan_token()
@@ -391,7 +429,9 @@ class Lexer:
             if token.type == TOKENTYPE.EOF:
                 break
             if token.type == TOKENTYPE.ILLEGAL:
-                logger.error(f"Error: Illegal token '{token.word}'on line '{token.line}'")
+                logger.error(
+                    f"Error: Illegal token '{token.word}'on line '{token.line}'"
+                )
                 # break
         return tokens
 
@@ -399,37 +439,55 @@ class Lexer:
 # IR Nodes
 @dataclass
 class IRNode:
-    """Base IR Node."""
+    """Base class for all Intermediate Representation nodes.
+
+    Attributes:
+        address: The memory address where this node's data begins in the ROM.
+        size: The total number of bytes this node occupies in the final output.
+        source_line: The line number in the source file that generated this node.
+        source_filepath: The path to the source file that generated this node.
+
+    """
 
     address: int
-    """Address where this node's output starts."""
     size: int
-    """Size in bytes this node will occupy in the ROM."""
     source_line: int
     source_filepath: str
 
 
 @dataclass
 class IRPadding(IRNode):
-    """Represents a |address directive's effect."""
+    """Represent a padding directive (e.g., '|' or '$').
+
+    Attributes:
+        target_address: The absolute address we padded to.
+
+    """
 
     target_address: int
-    """The address we padded to (same as self.address).
-
-    Size would be target_address - previous_address
-    """
 
 
 @dataclass
 class IRRawBytes(IRNode):
-    """For ASCII, standalone hex, {data}."""
+    """Represent raw data like ASCII strings or hexadecimal blocks.
+
+    Attributes:
+        byte_values: List of 8-bit integers to be written directly to the ROM.
+
+    """
 
     byte_values: list[int]
 
 
 @dataclass
 class IROpcode(IRNode):
-    """For simple 1-byte opcodes like BRK, DUP, ADD."""
+    """Represent a single Uxn instruction.
+
+    Attributes:
+        mnemonic: The string name of the opcode (e.g., "DUP").
+        byte_value: The 8-bit value of the instruction.
+
+    """
 
     mnemonic: str
     byte_value: int
@@ -437,14 +495,23 @@ class IROpcode(IRNode):
 
 @dataclass
 class IRLabelPlaceholder(IRNode):
-    """For operations needing a label resolved."""
+    """Represent an operation that requires a label address to be resolved.
+
+    Used for relative jumps, literal addresses, and zero-page references
+    where the final value is calculated during Pass 2.
+
+    Attributes:
+        label_name: The name of the label to resolve.
+        ref_type: The type of reference (e.g., "LITERAL_ABS16", "RAW_REL8").
+        placeholder_size: Number of bytes reserved for the resolved address.
+        implied_opcode: Optional opcode byte that precedes the placeholder.
+
+    """
 
     label_name: str
     ref_type: str
-    """LIT2_ABS, LIT2_REL."""
     placeholder_size: int
     implied_opcode: int | None = None
-    """Byte for LIT2, JMI, LIT or None for raw."""
 
 
 class ParsingError(Exception):
@@ -494,16 +561,21 @@ class InternalParsingError(ParsingError):
 
 
 class Parser:
-    """A parser for uxntal.
+    """A multi-pass parser for converting Tal tokens into an IR stream.
 
-    Uses Tokens from the Lexer.
+    The Parser manages the symbol table, macro expansion, and coordinate resolution.
+    It produces an IR stream in Pass 1 and generates final ROM bytes in Pass 2.
     """
 
-    def __init__(self, tokens: list[Token], cur_filepath: str | Path | None = None) -> None:
-        """Initialize a new parser object.
+    def __init__(
+        self, tokens: list[Token], cur_filepath: str | Path | None = None
+    ) -> None:
+        """Initialize a new parser instance.
 
         Args:
-            tokens: A list of Tokens.
+            tokens: A list of Token instances provided by the Lexer.
+            cur_filepath: The path to the main source file being parsed.
+
         """
         self.tokens = tokens
         self.token_idx = 0
@@ -524,16 +596,14 @@ class Parser:
         self.current_scope = ""
 
     def _cur_ctx_filepath(self) -> str | Path:
+        """Return the path of the file currently being processed."""
         if self.filepath_stack:
             return self.filepath_stack[-1]
         else:
             return "unknown_file"
 
     def _advance(self) -> None:
-        """Advance the token.
-
-        Consume the token.
-        """
+        """Consume the current token and advance the cursor to the next one."""
         self.token_idx += 1
         if self.token_idx < len(self.tokens):
             self.current_token = self.tokens[self.token_idx]
@@ -541,23 +611,30 @@ class Parser:
             self.current_token = None
 
     def _peek_token(self, offset: int = 1) -> Token | None:
+        """Return a token at a relative offset from the current cursor position."""
         peek_idx = self.token_idx + offset
         if 0 <= peek_idx < len(self.tokens):
             return self.tokens[peek_idx]
         return None
 
     def _is_hex_digit(self, char: str) -> bool:
-        """Check if a char is a valid hexidecimal digit."""
+        """Check if a character is a valid hexadecimal digit."""
         if not char:
             return False
         char_lower = char.lower()
         return "0" <= char_lower <= "9" or "a" <= char_lower <= "f"
 
     def _is_purely_hex(self, word: str) -> bool:
+        """Check if a word consists entirely of hexadecimal digits."""
         return all(self._is_hex_digit(char) for char in word)
 
     def write_rom(self, output_filename: str | Path | None = None) -> None:
-        """Write out the rom file."""
+        """Write the accumulated ROM data to a file.
+
+        Args:
+            output_filename: The path to the file to create.
+
+        """
         logger.debug(f"Preparing to write ROM to {output_filename}.")
 
         # The start address for program data in a UXN ROM
@@ -583,11 +660,17 @@ class Parser:
                         f" bytes to {output_filename}."
                     )
         except OSError as e:
-            raise ParsingError(f"Failed to write ROM file '{output_filename}': {e}") from e
+            raise ParsingError(
+                f"Failed to write ROM file '{output_filename}': {e}"
+            ) from e
 
     def _process_token_stream(self) -> None:
+        """Iterate through all tokens and dispatch them for Pass 1 processing."""
         try:
-            while self.current_token is not None and self.current_token.type != TOKENTYPE.EOF:
+            while (
+                self.current_token is not None
+                and self.current_token.type != TOKENTYPE.EOF
+            ):
                 self._dispatch_current_token_for_pass1()
         except ParsingError as pe:
             pe.filename = self._cur_ctx_filepath()
@@ -596,9 +679,9 @@ class Parser:
             raise
 
     def _ensure_default_start_page(self) -> None:
-        """Apply default padding if we're still in the zero page."""
+        """Apply default padding to address 0x0100 if code starts earlier."""
         if not self.main_code_block_started and self.current_address < 0x0100:
-            logger.debug("First code/data directive encountered below" " page 0x0100")
+            logger.debug("First code/data directive encountered below page 0x0100")
             logger.debug("Applying default padding.")
             target_address = 0x0100
             padding_size = target_address - self.current_address
@@ -621,7 +704,14 @@ class Parser:
         self.main_code_block_started = True
 
     def parse_pass1(self) -> tuple[list[IRNode], dict[str, int]]:
-        """Parse tokens Pass #1."""
+        """Perform the first assembly pass.
+
+        Identify labels, define macros, and build the initial IR stream.
+
+        Returns:
+            A tuple containing the IR stream and the populated symbol table.
+
+        """
         logger.debug("Starting parser pass 1")
 
         if not self.tokens or self.tokens[0].type == TOKENTYPE.EOF:
@@ -653,14 +743,15 @@ class Parser:
         return self.ir_stream, self.symbol_table
 
     def _pp2(self, obj: IRNode) -> None:
-        logger.debug(f" PASS2: Emitted {obj}" f" at 0x{obj.address:04x}")
+        """Log a debug message for an emitted IR node during Pass 2."""
+        logger.debug(f" PASS2: Emitted {obj} at 0x{obj.address:04x}")
 
-    def _handle_ir_label_placeholder(self, ir_node: IRLabelPlaceholder, symbol_table: dict[str, int]) -> None:
-        """Pass 2 handler for IRLabelPlaceholder nodes.
+    def _handle_ir_label_placeholder(
+        self, ir_node: IRLabelPlaceholder, symbol_table: dict[str, int]
+    ) -> None:
+        """Resolve a label and emit its value to the ROM.
 
-        Resolves the label, calculates the final value (absolute,
-        relative, etc), and writes the corresponding opcode and/or
-        placeholder bytes to ROM data.
+        Handle absolute, relative, and zero-page address resolution.
         """
         # -- Step 1: Emit the implied opcode byte, if it has one --
         # This implies a literal addressing rune like ';',
@@ -672,7 +763,7 @@ class Parser:
         target_addr = symbol_table.get(ir_node.label_name)
         if target_addr is None:
             raise ParsingError(
-                f"Undefined label '{ir_node.label_name}'" " referenced.",
+                f"Undefined label '{ir_node.label_name}' referenced.",
                 line=ir_node.source_line,
                 filename=ir_node.source_filepath,
             )
@@ -706,7 +797,9 @@ class Parser:
             # check if offset in range.
             if "REL" in ir_node.ref_type and not (-128 <= value_to_write <= 127):
                 raise ParsingError(
-                    f"Relative jump to '{ir_node.label_name}'" f"is too far: ({value_to_write} bytes)." " Must be between -128 and 127.",
+                    f"Relative jump to '{ir_node.label_name}'"
+                    f"is too far: ({value_to_write} bytes)."
+                    " Must be between -128 and 127.",
                     line=ir_node.source_line,
                     filename=ir_node.source_filepath,
                 )
@@ -714,7 +807,10 @@ class Parser:
             if "ZP" in ir_node.ref_type and not (0 <= value_to_write <= 0xFF):
                 # TODO: Write a convenience function for PEs
                 raise ParsingError(
-                    f"Zero-page address for " f"'{ir_node.label_name}'" f"(0x{value_to_write:02x})" " is outside the zero-page (0x00-0xff).",
+                    f"Zero-page address for "
+                    f"'{ir_node.label_name}'"
+                    f"(0x{value_to_write:02x})"
+                    " is outside the zero-page (0x00-0xff).",
                     line=ir_node.source_line,
                     filename=ir_node.source_filepath,
                 )
@@ -726,11 +822,15 @@ class Parser:
             self.rom_data.append(value_to_write & 0xFF)
 
         logger.debug(
-            f" PASS2: Resolved {ir_node.label_name}" f"-> 0x{target_addr:04x}," f" wrote value 0x{value_to_write & 0xFFFF:04x} " f" at 0x{ir_node.address:04x}" f" (ref_type: {ir_node.ref_type})"
+            f" PASS2: Resolved {ir_node.label_name}"
+            f"-> 0x{target_addr:04x},"
+            f" wrote value 0x{value_to_write & 0xFFFF:04x} "
+            f" at 0x{ir_node.address:04x}"
+            f" (ref_type: {ir_node.ref_type})"
         )
 
     def _handle_ir_padding(self, ir_node: IRNode) -> None:
-        """Handle padding for Pass 2."""
+        """Apply zero-byte padding to reach the address specified by an IR node."""
         current_rom_len = len(self.rom_data)
         expected_address = ir_node.address
 
@@ -738,13 +838,17 @@ class Parser:
         # where this node should start.
         if expected_address > current_rom_len:
             padding_needed = expected_address - current_rom_len
-            logger.debug(f"  PASS2: Padding with {padding_needed} zero bytes" f" to reach 0x{expected_address:04x}")
+            logger.debug(
+                f"  PASS2: Padding with {padding_needed} zero bytes"
+                f" to reach 0x{expected_address:04x}"
+            )
             self.rom_data.extend([0x00] * padding_needed)
 
         # Sanity check to ensure the padding worked or to catch rewind errors.
         if expected_address != len(self.rom_data):
             raise ParsingError(
-                f"Pass 2 PC desync. Expected address" f" 0x{len(self.rom_data):04x}, "
+                f"Pass 2 PC desync. Expected address"
+                f" 0x{len(self.rom_data):04x}, "
                 f"but IR node is at 0x{expected_address:04x}."
                 f" This can be caused by a "
                 f"rewind padding directive "
@@ -753,8 +857,14 @@ class Parser:
                 filename=ir_node.source_filepath,
             )
 
-    def parse_pass2(self, ir_stream: list[IRNode], symbol_table: dict[str, int]) -> None:
-        """Parse tokens Pass #2."""
+    def parse_pass2(
+        self, ir_stream: list[IRNode], symbol_table: dict[str, int]
+    ) -> None:
+        """Perform the second assembly pass.
+
+        Iterate through the IR stream and generate the final ROM data by
+        resolving all addresses and offsets.
+        """
         logger.debug("Starting parser pass 2.")
         self.current_address = 0x0000
         self.rom_data = bytearray()
@@ -771,7 +881,11 @@ class Parser:
                     current_rom_len = len(self.rom_data)
                     if inst.target_address > current_rom_len:
                         final_padding = ir.target_address - current_rom_len
-                        logger.debug(f"  PASS2: IRPadding node applying" f" {final_padding} zero bytes to" f" reach 0x{inst.target_address:04x}")
+                        logger.debug(
+                            f"  PASS2: IRPadding node applying"
+                            f" {final_padding} zero bytes to"
+                            f" reach 0x{inst.target_address:04x}"
+                        )
                         self.rom_data.extend([0x00] * final_padding)
                 # The case where target_address < current_rom_len was already
                 # flagged as a warning/error by the sanity check in
@@ -789,7 +903,10 @@ class Parser:
                     raise NotImplementedError
         self.current_address = len(self.rom_data)
         logger.debug("Parser Pass 2 Complete.")
-        logger.debug(f"Final PC (Pass 2): 0x{self.current_address:04x}" f" ROM size {len(self.rom_data)} bytes.")
+        logger.debug(
+            f"Final PC (Pass 2): 0x{self.current_address:04x}"
+            f" ROM size {len(self.rom_data)} bytes."
+        )
 
     def _dispatch_current_token_for_pass1(self) -> None:
         """Handle a single token based on its type during Pass 1."""
@@ -860,12 +977,12 @@ class Parser:
 
             case TOKENTYPE.RUNE_LBRACKET:
                 # For [ (ignored)
-                logger.debug(f"  Ignoring Rune '['" f" (Line {self.current_token.line})")
+                logger.debug(f"  Ignoring Rune '[' (Line {self.current_token.line})")
                 self._advance()
 
             case TOKENTYPE.RUNE_RBRACKET:
                 # ] ignored
-                logger.debug(f"  Ignoring Rune ']'" f" (Line {self.current_token.line})")
+                logger.debug(f"  Ignoring Rune ']' (Line {self.current_token.line})")
                 self._advance()
 
             case TOKENTYPE.OPCODE:
@@ -876,39 +993,49 @@ class Parser:
 
             case TOKENTYPE.RUNE_RBRACE:
                 raise SyntaxError(
-                    f"Unexpected closing delimiter" f" '{self.current_token.word}'",
+                    f"Unexpected closing delimiter '{self.current_token.word}'",
                     token=self.current_token,
                 )
             # Handle delimiters that don't contribute to size but need
             # to be consumed if not part of a larger structure already
             case TOKENTYPE.LPAREN | TOKENTYPE.RPAREN:
-                logger.debug(f"  Skipping Delimiter/Ignored Token: " f"'{self.current_token.word}' type: {token_type}" f" (Line {self.current_token.line})")
+                logger.debug(
+                    f"  Skipping Delimiter/Ignored Token: "
+                    f"'{self.current_token.word}' type: {token_type}"
+                    f" (Line {self.current_token.line})"
+                )
                 self._advance()
             case _:
                 self._advance()
                 # This should ideally be an error for unexpected tokens.
                 raise SyntaxError(
-                    f"Unexpected token during dispatch:" f" '{self.current_token.word}'",
+                    f"Unexpected token during dispatch: '{self.current_token.word}'",
                     token=self.current_token,
                     filename=self._cur_ctx_filepath(),
                 )
 
-    def _parse_anonymous_block_content(self, open_brace_token: Token, anonymous_label_end_name: str) -> None:
-        """
-        Parse tokens within an anonymous { } block until a matching '}'.
+    def _parse_anonymous_block_content(
+        self, open_brace_token: Token, anonymous_label_end_name: str
+    ) -> None:
+        """Parse tokens within an anonymous { } block until a matching '}'.
 
         Relies on the main dispatcher _dispatch_current_token_for_pass1
         to handle content. Advances self.current_address based on the
         content. Consumes the closing '}'.
         """
-        logger.debug(f"  Entering anonymous block started on line" f" {open_brace_token.line}")
+        logger.debug(
+            f"  Entering anonymous block started on line {open_brace_token.line}"
+        )
         logger.debug(f"  Will define '{anonymous_label_end_name}'")
         depth = 1
         while self.current_token is not None:
             # Nested block
             if self.current_token.type == TOKENTYPE.RUNE_LBRACE:
                 depth += 1
-                logger.debug(f"    Nested '{{' found, depth now {depth}" f" (Line {self.current_token.line})")
+                logger.debug(
+                    f"    Nested '{{' found, depth now {depth}"
+                    f" (Line {self.current_token.line})"
+                )
                 # The _dispatch_current_token_for_pass1 called below
                 # will handle this if RUNE_LBRACE is an error or leads
                 # to another block construct. For now, we assume an
@@ -921,13 +1048,19 @@ class Parser:
 
             elif self.current_token.type == TOKENTYPE.RUNE_RBRACE:
                 depth -= 1
-                logger.debug(f"    Found '}}', depth now {depth}" f" (Line {self.current_token.line})")
+                logger.debug(
+                    f"    Found '}}', depth now {depth}"
+                    f" (Line {self.current_token.line})"
+                )
                 if depth == 0:
                     end_label_address = self.current_address
                     self.symbol_table[anonymous_label_end_name] = end_label_address
                     # Consume the final '}'
                     self._advance()
-                    logger.debug(f"    Exiting anonymous block." f" PC is now 0x{self.current_address:04x}")
+                    logger.debug(
+                        f"    Exiting anonymous block."
+                        f" PC is now 0x{self.current_address:04x}"
+                    )
                     # Successfully parsed and closed the block
                     return
                 else:
@@ -942,7 +1075,10 @@ class Parser:
                 else:
                     token = self.tokens[-1]
                 raise SyntaxError(
-                    f"Unclosed anonymous block {{" f" starting on line " f"{open_brace_token.line}." " Reached EOF.",
+                    f"Unclosed anonymous block {{"
+                    f" starting on line "
+                    f"{open_brace_token.line}."
+                    " Reached EOF.",
                     token=token,
                 )
             else:
@@ -956,7 +1092,7 @@ class Parser:
         else:
             token = self.tokens[-1]
         raise SyntaxError(
-            f"Unclosed anonymous block {{" f" starting on line {open_brace_token.line}.",
+            f"Unclosed anonymous block {{ starting on line {open_brace_token.line}.",
             token=token,
         )
 
@@ -971,10 +1107,16 @@ class Parser:
         # Consume '|' token or '$' token
         self._advance()
 
-        if not (self.current_token and (self.current_token.type == TOKENTYPE.HEX_LITERAL or self.current_token.type == TOKENTYPE.IDENTIFIER)):
+        if not (
+            self.current_token
+            and (
+                self.current_token.type == TOKENTYPE.HEX_LITERAL
+                or self.current_token.type == TOKENTYPE.IDENTIFIER
+            )
+        ):
             # TODO: looking up label in symbol_table
             raise SyntaxError(
-                f"Expected hex literal after" f"padding rune '{rune_char}'",
+                f"Expected hex literal afterpadding rune '{rune_char}'",
                 token=rune_token,
             )
 
@@ -991,21 +1133,32 @@ class Parser:
         if rune_char == "|":
             target_address = val
             if target_address < self.current_address:
-                logger.warning(f"Padding directive on line {rune_token.line}" " rewinds program counter from" f" 0x{self.current_address:04x} to" f" 0x{target_address:04x}.")
+                logger.warning(
+                    f"Padding directive on line {rune_token.line}"
+                    " rewinds program counter from"
+                    f" 0x{self.current_address:04x} to"
+                    f" 0x{target_address:04x}."
+                )
             self.current_address = target_address
 
         # Relative padding
         elif rune_char == "$":
             target_address = self.current_address + val
-            logging.debug(f"Padding by relative offset 0x{val:02x} " f"(Line {rune_token.line})." f" PC from 0x{self.current_address:04x}" f" to 0x{self.current_address + target_address:04x}")
+            logging.debug(
+                f"Padding by relative offset 0x{val:02x} "
+                f"(Line {rune_token.line})."
+                f" PC from 0x{self.current_address:04x}"
+                f" to 0x{self.current_address + target_address:04x}"
+            )
             self.current_address += val
 
         # Consume the hex literal/label token.
         self._advance()
 
-    def _handle_literal_addressing_rune_op(self, rune_char_expected: str, implied_opcode_byte: int, placeholder_size: int) -> None:
-        """
-        Handle runes like ';', '!', '?', ',' and '.'.
+    def _handle_literal_addressing_rune_op(
+        self, rune_char_expected: str, implied_opcode_byte: int, placeholder_size: int
+    ) -> None:
+        """Handle runes like ';', '!', '?', ',' and '.'.
 
         Handles runes like ;, !, ?, ,, . that imply an opcode and a placeholder
         for an address/offset.
@@ -1027,7 +1180,7 @@ class Parser:
         prefix_operation_size = 1 + placeholder_size
 
         target_label_name = ""
-        ref_type = f"LITERAL_{rune_char_expected}_{placeholder_size*8}"
+        ref_type = f"LITERAL_{rune_char_expected}_{placeholder_size * 8}"
         match rune_char_expected:
             case ";":
                 ref_type = "LITERAL_ABS16_VIA_LIT2"
@@ -1040,15 +1193,26 @@ class Parser:
             case "!":
                 ref_type = "JMI_REL16_VIA_OPCODE"
             case _:
-                raise ParsingError(f"Unexpected rune char" f" {ref_type}", token=rune_token)
+                raise ParsingError(f"Unexpected rune char {ref_type}", token=rune_token)
         if self.current_token and self.current_token.type == TOKENTYPE.RUNE_LBRACE:
             # Operand is an anonymous block { ... }
             lbrace_token = self.current_token
             target_label_name = self._generate_anonymous_label_name(lbrace_token.line)
-            logger.debug(f"  IR Target: Literal Addressing Rune Op:" f"{rune_token.word}{{...}} detected " " (Line {rune_token.line})")
+            logger.debug(
+                f"  IR Target: Literal Addressing Rune Op:"
+                f"{rune_token.word}{{...}} detected "
+                " (Line {rune_token.line})"
+            )
 
-            logger.debug(f"  Addressing Rune Op: {rune_token.word}{{...}}" f" detected (Line {rune_token.line})")
-            logger.debug(f"    Prefix operation {rune_token.word}{{" f" contributes {prefix_operation_size} bytes." f" PC from 0x{self.current_address:04x}")
+            logger.debug(
+                f"  Addressing Rune Op: {rune_token.word}{{...}}"
+                f" detected (Line {rune_token.line})"
+            )
+            logger.debug(
+                f"    Prefix operation {rune_token.word}{{"
+                f" contributes {prefix_operation_size} bytes."
+                f" PC from 0x{self.current_address:04x}"
+            )
             self.ir_stream.append(
                 IRLabelPlaceholder(
                     address=op_start_address,
@@ -1062,10 +1226,14 @@ class Parser:
                 )
             )
             self.current_address += prefix_operation_size
-            logger.debug(f"    ...to 0x{self.current_address:04x}." " Now parsing block content.")
+            logger.debug(
+                f"    ...to 0x{self.current_address:04x}. Now parsing block content."
+            )
             # Consume '{'
             self._advance()
-            self._parse_anonymous_block_content(lbrace_token, anonymous_label_end_name=target_label_name)
+            self._parse_anonymous_block_content(
+                lbrace_token, anonymous_label_end_name=target_label_name
+            )
             # This will parse until '}' and advance PC for content The
             # address "provided" by { is self.current_address (which
             # is now after the '}'). This address would be used in
@@ -1074,14 +1242,23 @@ class Parser:
             # Operand is a standard label (&label or label)
             is_sub_label_ref = False
             label_prefix = ""
-            if self.current_token and (self.current_token.type == TOKENTYPE.RUNE_AMPERSAND or self.current_token.type == TOKENTYPE.RUNE_FORWARDSLASH):
+            if self.current_token and (
+                self.current_token.type == TOKENTYPE.RUNE_AMPERSAND
+                or self.current_token.type == TOKENTYPE.RUNE_FORWARDSLASH
+            ):
                 label_prefix = self.current_token.word
                 is_sub_label_ref = True
                 self._advance()
 
-            if not (self.current_token and (self.current_token.type == TOKENTYPE.IDENTIFIER or self.current_token.type == TOKENTYPE.HEX_LITERAL)):
+            if not (
+                self.current_token
+                and (
+                    self.current_token.type == TOKENTYPE.IDENTIFIER
+                    or self.current_token.type == TOKENTYPE.HEX_LITERAL
+                )
+            ):
                 raise SyntaxError(
-                    f"Expected label name or '{{'" f" after rune '{rune_token.word}'.",
+                    f"Expected label name or '{{' after rune '{rune_token.word}'.",
                     token=rune_token,
                 )
 
@@ -1091,7 +1268,9 @@ class Parser:
             if is_sub_label_ref:
                 if not self.current_scope:
                     raise SyntaxError(
-                        "Sub-label reference " f"'{label_prefix}{base_label_name}'" "used outside of a parent '@' scope.",
+                        "Sub-label reference "
+                        f"'{label_prefix}{base_label_name}'"
+                        "used outside of a parent '@' scope.",
                         token=label_identifier_token,
                     )
                 target_label_name = f"{self.current_scope}/{base_label_name}"
@@ -1113,7 +1292,14 @@ class Parser:
             displayed_label = base_label_name
             if is_sub_label_ref:
                 displayed_label = f"{label_prefix}{base_label_name}"
-            logger.debug(f"  Addressing Rune Op:" f" {rune_token.word}{displayed_label}, " f"implies [Opcode 0x{implied_opcode_byte:02x}" f" + {placeholder_size}b placeholder], " f"total size {prefix_operation_size}" f" (Line {rune_token.line})")
+            logger.debug(
+                f"  Addressing Rune Op:"
+                f" {rune_token.word}{displayed_label}, "
+                f"implies [Opcode 0x{implied_opcode_byte:02x}"
+                f" + {placeholder_size}b placeholder], "
+                f"total size {prefix_operation_size}"
+                f" (Line {rune_token.line})"
+            )
             self.current_address += prefix_operation_size
             # Consume label IDENTIFIER
             self._advance()
@@ -1124,7 +1310,9 @@ class Parser:
         Parser._anon_label_counter += 1
         return f"__ANON_END_{line}_{Parser._anon_label_counter}"
 
-    def _handle_raw_addressing_rune_op(self, rune_char: str, placeholder_size: int) -> None:
+    def _handle_raw_addressing_rune_op(
+        self, rune_char: str, placeholder_size: int
+    ) -> None:
         """Handle raw addressing runes like '_', '-', and '='.
 
         These directly reserve placeholder_size bytes for an address/offset.
@@ -1153,15 +1341,23 @@ class Parser:
                 ref_type = "RAW_ABS16"
             case _:
                 raise ParsingError(
-                    "Unknown raw rune:" f"'{rune_char}'" "in _handle_raw_addressing_rune_op",
+                    f"Unknown raw rune:'{rune_char}'in _handle_raw_addressing_rune_op",
                     token=rune_token,
                 )
         if self.current_token and self.current_token.type == TOKENTYPE.RUNE_LBRACE:
             # Operand is an anonymous block { ... }
             lbrace_token = self.current_token
             target_label_name = self._generate_anonymous_label_name(lbrace_token.line)
-            logger.debug(f"  Raw Addressing Rune Op: {rune_token.word}{{...}}" f" detected (Line {rune_token.line})")
-            logger.debug(f"    Prefix operation {rune_token.word}{{" f"contributes {prefix_operation_size} bytes" f" for placeholder." f" PC from 0x{self.current_address:04x}")
+            logger.debug(
+                f"  Raw Addressing Rune Op: {rune_token.word}{{...}}"
+                f" detected (Line {rune_token.line})"
+            )
+            logger.debug(
+                f"    Prefix operation {rune_token.word}{{"
+                f"contributes {prefix_operation_size} bytes"
+                f" for placeholder."
+                f" PC from 0x{self.current_address:04x}"
+            )
             self.ir_stream.append(
                 IRLabelPlaceholder(
                     address=op_start_address,
@@ -1175,22 +1371,35 @@ class Parser:
                 )
             )
             self.current_address += prefix_operation_size
-            logger.debug(f"    ...to 0x{self.current_address:04x}." " Now parsing block content.")
+            logger.debug(
+                f"    ...to 0x{self.current_address:04x}. Now parsing block content."
+            )
             # Consume '{'
             self._advance()
-            self._parse_anonymous_block_content(lbrace_token, anonymous_label_end_name=target_label_name)
+            self._parse_anonymous_block_content(
+                lbrace_token, anonymous_label_end_name=target_label_name
+            )
         else:
             # Operand is a standard label (&label or label)
             is_sub_label_ref = False
             label_prefix = ""
-            if self.current_token and (self.current_token.type == TOKENTYPE.RUNE_AMPERSAND or self.current_token.type == TOKENTYPE.RUNE_FORWARDSLASH):
+            if self.current_token and (
+                self.current_token.type == TOKENTYPE.RUNE_AMPERSAND
+                or self.current_token.type == TOKENTYPE.RUNE_FORWARDSLASH
+            ):
                 label_prefix = self.current_token.word
                 is_sub_label_ref = True
                 self._advance()
 
-            if not (self.current_token and (self.current_token.type == TOKENTYPE.IDENTIFIER or self.current_token.type == TOKENTYPE.HEX_LITERAL)):
+            if not (
+                self.current_token
+                and (
+                    self.current_token.type == TOKENTYPE.IDENTIFIER
+                    or self.current_token.type == TOKENTYPE.HEX_LITERAL
+                )
+            ):
                 raise SyntaxError(
-                    f"Expected label name or '{{'" f" after rune '{rune_token.word}'.",
+                    f"Expected label name or '{{' after rune '{rune_token.word}'.",
                     token=rune_token,
                 )
 
@@ -1200,7 +1409,9 @@ class Parser:
             if is_sub_label_ref:
                 if not self.current_scope:
                     raise SyntaxError(
-                        "Sub-label reference " f"'{label_prefix}{base_label_name}'" "used outside of a parent '@' scope.",
+                        "Sub-label reference "
+                        f"'{label_prefix}{base_label_name}'"
+                        "used outside of a parent '@' scope.",
                         token=label_identifier_token,
                     )
                 target_label_name = f"{self.current_scope}/{base_label_name}"
@@ -1222,7 +1433,13 @@ class Parser:
             displayed_label = base_label_name
             if is_sub_label_ref:
                 displayed_label = f"{label_prefix}{base_label_name}"
-            logger.debug(f"  Raw Addressing Rune Op:" f" {rune_token.word}{displayed_label}, " f"reserves {placeholder_size}-byte placeholder," f" total size {prefix_operation_size}" f" (Line {rune_token.line})")
+            logger.debug(
+                f"  Raw Addressing Rune Op:"
+                f" {rune_token.word}{displayed_label}, "
+                f"reserves {placeholder_size}-byte placeholder,"
+                f" total size {prefix_operation_size}"
+                f" (Line {rune_token.line})"
+            )
             self.current_address += prefix_operation_size
             # Consume label IDENTIFIER
             self._advance()
@@ -1234,12 +1451,18 @@ class Parser:
         op_addr = self.current_address
         if op_token.value is None or not isinstance(op_token.value, int):
             raise ParsingError(
-                f"Internal Error: OPCODE token" f" '{op_token.word}' is missing" f" a valid integer value attribute.",
+                f"Internal Error: OPCODE token"
+                f" '{op_token.word}' is missing"
+                f" a valid integer value attribute.",
                 token=op_token,
             )
         # All UXN opcodes are 1 byte.
         size = 1
-        logger.debug(f"  Opcode: {op_token.word}" f" (Byte: {op_token.value:#04x})," f" size {size} (Line {op_token.line})")
+        logger.debug(
+            f"  Opcode: {op_token.word}"
+            f" (Byte: {op_token.value:#04x}),"
+            f" size {size} (Line {op_token.line})"
+        )
 
         self.ir_stream.append(
             IROpcode(
@@ -1260,10 +1483,14 @@ class Parser:
             return
         self._advance()
         if not (self.current_token and self.current_token.type == TOKENTYPE.IDENTIFIER):
-            raise SyntaxError("Expected filepath (IDENTIFIER) after '~'", token=include_rune_token)
+            raise SyntaxError(
+                "Expected filepath (IDENTIFIER) after '~'", token=include_rune_token
+            )
         filepath_token = self.current_token
         filepath_str = filepath_token.word
-        logger.debug(f"  Include Directive: ~{filepath_str}" f" (Line {include_rune_token.line})")
+        logger.debug(
+            f"  Include Directive: ~{filepath_str} (Line {include_rune_token.line})"
+        )
         # Consume the filepath_str
         self._advance()
 
@@ -1287,8 +1514,13 @@ class Parser:
         inc_lexer = Lexer(inc_source, filename=filepath_str)
         inc_tokens = inc_lexer.scan_all_tokens()
         if not inc_tokens:
-            logger.debug(f"Included file '{filepath_str}' is empty or" " contains no tokens.")
-        logger.debug(f"Starting Pass 1 for included file:" f" {filepath_str} PC=0x{self.current_address:04x}")
+            logger.debug(
+                f"Included file '{filepath_str}' is empty or contains no tokens."
+            )
+        logger.debug(
+            f"Starting Pass 1 for included file:"
+            f" {filepath_str} PC=0x{self.current_address:04x}"
+        )
         # Set this parser's tokens to included file's tokens
         self.tokens = inc_tokens
         self.token_idx = 0
@@ -1296,7 +1528,11 @@ class Parser:
         # Recursively process token stream. It should finish
         # and come back here.
         self._process_token_stream()
-        logger.debug(f"Finished Pass 1 for included file:" f" {filepath_str}" f" PC=0x{self.current_address:04x}")
+        logger.debug(
+            f"Finished Pass 1 for included file:"
+            f" {filepath_str}"
+            f" PC=0x{self.current_address:04x}"
+        )
         # Restore previous state of parser
         self.tokens = orig_tokens
         self.token_idx = orig_token_idx
@@ -1326,7 +1562,9 @@ class Parser:
                 source_filepath=str(self._cur_ctx_filepath()),
             )
         )
-        logger.debug(f"Raw ASCII Chunk: \"{content}\", " f"size: {size} bytes" f" Line: {token.line}")
+        logger.debug(
+            f'Raw ASCII Chunk: "{content}", size: {size} bytes Line: {token.line}'
+        )
         self.current_address += size
         self._advance()
 
@@ -1344,7 +1582,13 @@ class Parser:
         # Consume '#'
         self._advance()
 
-        if not (self.current_token and (self.current_token.type == TOKENTYPE.HEX_LITERAL or self.current_token.type == TOKENTYPE.IDENTIFIER)):
+        if not (
+            self.current_token
+            and (
+                self.current_token.type == TOKENTYPE.HEX_LITERAL
+                or self.current_token.type == TOKENTYPE.IDENTIFIER
+            )
+        ):
             # TODO: Handle this error properly
             # SyntaxError("Expected hex literal after #", token=token)
             pass
@@ -1358,7 +1602,9 @@ class Parser:
             # Test conversion to see if it's a valid number.
             val_int = int(val, 16)
         except ValueError as e:
-            raise SyntaxError(f"Invalid hex value '{val}' after '#'", token=hex_literal) from e
+            raise SyntaxError(
+                f"Invalid hex value '{val}' after '#'", token=hex_literal
+            ) from e
 
         val_len = len(val)
         size = 0
@@ -1453,7 +1699,10 @@ class Parser:
             # raise SyntaxError()
         else:
             self.symbol_table[full_sub_label_name] = self.current_address
-            logger.debug(f"  Defined sub-label '{full_sub_label_name}'" f" at 0x{self.current_address:04x}")
+            logger.debug(
+                f"  Defined sub-label '{full_sub_label_name}'"
+                f" at 0x{self.current_address:04x}"
+            )
         # Consume sub-label identifier
         self._advance()
 
@@ -1462,8 +1711,13 @@ class Parser:
             dollar_token = tok
             # Consume '$'
             self._advance()
-            if not ((t := self.current_token) and (t.type == TOKENTYPE.HEX_LITERAL or t.type == TOKENTYPE.IDENTIFIER)):
-                raise SyntaxError("Expected size (HEX_LITERAL) after '$'", token=dollar_token)
+            if not (
+                (t := self.current_token)
+                and (t.type == TOKENTYPE.HEX_LITERAL or t.type == TOKENTYPE.IDENTIFIER)
+            ):
+                raise SyntaxError(
+                    "Expected size (HEX_LITERAL) after '$'", token=dollar_token
+                )
             size_hex_token = t
             try:
                 size = int(size_hex_token.word, 16)
@@ -1471,7 +1725,8 @@ class Parser:
                     raise ValueError("Size cannot be negative.")
             except ValueError as e:
                 raise SyntaxError(
-                    f"Invalid size {size_hex_token.word} " f"for sub-label {sub_label_token.word}",
+                    f"Invalid size {size_hex_token.word} "
+                    f"for sub-label {sub_label_token.word}",
                     token=size_hex_token,
                 ) from e
             logger.debug(
@@ -1508,17 +1763,27 @@ class Parser:
         # Consume '@'
         self._advance()
         if not (self.current_token and self.current_token.type == TOKENTYPE.IDENTIFIER):
-            raise SyntaxError("Expected parent label name after '@'.", token=directive_token)
+            raise SyntaxError(
+                "Expected parent label name after '@'.", token=directive_token
+            )
         parent_label_token = self.current_token
         parent_label_name = parent_label_token.word
         self.current_scope = parent_label_name
         logger.debug(f"  Scope set to '{self.current_scope}'")
         if parent_label_name in self.symbol_table:
             # TODO: write a custom warning function with line and label
-            logger.warning("Duplicate label: %s, Line %s", parent_label_name, parent_label_token.line)
+            logger.warning(
+                "Duplicate label: %s, Line %s",
+                parent_label_name,
+                parent_label_token.line,
+            )
         else:
             self.symbol_table[parent_label_name] = self.current_address
-            logger.debug(f'Define label "{parent_label_name}" at ' f"0x{self.current_address:04x} " f"(Line {parent_label_token.line})")
+            logger.debug(
+                f'Define label "{parent_label_name}" at '
+                f"0x{self.current_address:04x} "
+                f"(Line {parent_label_token.line})"
+            )
         # Consume parent label identifier
         self._advance()
         while (t := self.current_token) and t.type == TOKENTYPE.RUNE_AMPERSAND:
@@ -1537,7 +1802,10 @@ class Parser:
         self._advance()
 
         if not (self.current_token and self.current_token.type == TOKENTYPE.IDENTIFIER):
-            raise SyntaxError("Expected sub-label name (IDENTIFIER) after standalone '&'.", token=ampersand_token)
+            raise SyntaxError(
+                "Expected sub-label name (IDENTIFIER) after standalone '&'.",
+                token=ampersand_token,
+            )
         sub_label_token = self.current_token
         sub_label_name = sub_label_token.word
 
@@ -1550,10 +1818,18 @@ class Parser:
         full_sub_label_name = f"{self.current_scope}/{sub_label_name}"
 
         if full_sub_label_name in self.symbol_table:
-            logger.warning(f"Duplicate sub-label definition for '{full_sub_label_name}' on line {sub_label_token.line}.")
+            logger.warning(
+                "Duplicate sub-label definition for "
+                f"'{full_sub_label_name}' on line {sub_label_token.line}."
+            )
         else:
             self.symbol_table[full_sub_label_name] = self.current_address
-            logger.debug(f"  Defined sub-label" f" '{full_sub_label_name}' at" f" 0x{self.current_address:04x}" f" (Line {sub_label_token.line})")
+            logger.debug(
+                f"  Defined sub-label"
+                f" '{full_sub_label_name}' at"
+                f" 0x{self.current_address:04x}"
+                f" (Line {sub_label_token.line})"
+            )
 
         # This directive only defines a label; it has no size itself.
         # The following instructions will advance the PC.
@@ -1591,7 +1867,9 @@ class Parser:
                 byte_values.append((val_int >> 8) & 0xFF)
                 byte_values.append(val_int & 0xFF)
         except ValueError as e:
-            raise SyntaxError(f"Invalid hex value for raw data: '{data_word}'", token=data_token) from e
+            raise SyntaxError(
+                f"Invalid hex value for raw data: '{data_word}'", token=data_token
+            ) from e
         # Create and append the IR node.
         self.ir_stream.append(
             IRRawBytes(
@@ -1602,13 +1880,17 @@ class Parser:
                 byte_values=byte_values,
             )
         )
-        logger.debug("  Raw Hex Data Byte(s): %s, size: %s (Line %s)", data_word, data_size, data_token.line)
+        logger.debug(
+            "  Raw Hex Data Byte(s): %s, size: %s (Line %s)",
+            data_word,
+            data_size,
+            data_token.line,
+        )
         self.current_address += data_size
         self._advance()
 
     def _handle_raw_hex_data_block(self) -> None:
-        """
-        Handle a raw hex data block: { xx yy zz ... }.
+        """Handle a raw hex data block: { xx yy zz ... }.
 
         Called when current_token is RUNE_LBRACE.
         """
@@ -1622,7 +1904,10 @@ class Parser:
         while True:
             if self.current_token is None or self.current_token.type == TOKENTYPE.EOF:
                 # We hit the end of the file before finding '}'
-                err_msg = f"Unclosed raw hex data block {{ starting on " f"line {lbrace_token.line}. Reached EOF."
+                err_msg = (
+                    f"Unclosed raw hex data block {{ starting on "
+                    f"line {lbrace_token.line}. Reached EOF."
+                )
                 raise SyntaxError(err_msg, token=lbrace_token)
 
             # Check for the exit condition FIRST.
@@ -1630,18 +1915,26 @@ class Parser:
                 break  # Found the end of the block, exit the loop.
 
             # If not the end, it must be a hex literal.
-            if self.current_token.type == TOKENTYPE.HEX_LITERAL or self.current_token.type == TOKENTYPE.IDENTIFIER:
+            if (
+                self.current_token.type == TOKENTYPE.HEX_LITERAL
+                or self.current_token.type == TOKENTYPE.IDENTIFIER
+            ):
                 # Delegate to the existing handler. It will update PC,
                 # generate IR, and advance the token.
                 self._handle_standalone_hex_data()
             else:
                 # If not '}' or a hex literal, it's an error.
-                err_msg = "Expected HEX_LITERAL or '}' in raw hex data " f"block, found '{self.current_token.word}'"
+                err_msg = (
+                    "Expected HEX_LITERAL or '}' in raw hex data "
+                    f"block, found '{self.current_token.word}'"
+                )
                 raise SyntaxError(err_msg, token=self.current_token)
 
         # After the loop breaks, self.current_token is the closing brace.
         if self.current_token:
-            logger.debug(f"  Raw Hex Data Block End }} (Line {self.current_token.line})")
+            logger.debug(
+                f"  Raw Hex Data Block End }} (Line {self.current_token.line})"
+            )
         # Consume '}'
         self._advance()
 
@@ -1669,7 +1962,11 @@ class Parser:
             elif hex_len <= 2:
                 size = 1
                 byte_values.append(int(word, 16))
-                logger.debug(f"Hex-like identifier (as raw byte)" f", word: '{word}', size: '{size}'" f", line: '{id_token.line}'")
+                logger.debug(
+                    f"Hex-like identifier (as raw byte)"
+                    f", word: '{word}', size: '{size}'"
+                    f", line: '{id_token.line}'"
+                )
             elif hex_len <= 4:
                 size = 2
                 val = int(word, 16)
@@ -1677,9 +1974,17 @@ class Parser:
                 byte_values.append((val >> 8) & 0xFF)
                 # Low byte
                 byte_values.append(val & 0xFF)
-                logger.debug(f"Hex-like identifier (as raw short)" f", word: '{word}', size: '{size}'" f", line: '{id_token.line}'")
+                logger.debug(
+                    f"Hex-like identifier (as raw short)"
+                    f", word: '{word}', size: '{size}'"
+                    f", line: '{id_token.line}'"
+                )
             else:
-                logger.warning(f"Long hex-like id '{word}'" f", line: '{id_token.line}'." " Treating as bare word call")
+                logger.warning(
+                    f"Long hex-like id '{word}'"
+                    f", line: '{id_token.line}'."
+                    " Treating as bare word call"
+                )
                 size = 3
                 self.ir_stream.append(
                     IRLabelPlaceholder(
@@ -1714,14 +2019,19 @@ class Parser:
             if word.startswith("&") or word.startswith("/"):
                 if not self.current_scope:
                     raise SyntaxError(
-                        f"Sub-label reference '{word}'used outside of a parent '@' scope.",
+                        f"Sub-label reference '{word}'used"
+                         "outside of a parent '@' scope.",
                         token=id_token,
                     )
                 base_label_name = word[1:]
                 target_label_name = f"{self.current_scope}/{base_label_name}"
             else:
                 target_label_name = word
-            logger.debug(f"  Bare Word Call" f" (JSR-like to '{word}',)" f" size {size} bytes (Line {id_token.line})")
+            logger.debug(
+                f"  Bare Word Call"
+                f" (JSR-like to '{word}',)"
+                f" size {size} bytes (Line {id_token.line})"
+            )
             self.ir_stream.append(
                 IRLabelPlaceholder(
                     address=op_addr,
@@ -1738,32 +2048,36 @@ class Parser:
         self._advance()
 
     def _handle_macro_definition(self) -> None:
-        """Handle a macro definition: %name { tokens1 ... }.
+        """Handle a macro definition: %name { tokens ... }.
 
-        Consumes tokens for the definition and stores the macro
-        name in its body (list of tokens).
+        Consume tokens for the definition and store the macro body.
         """
         # The % token
         percent_token = self.current_token
         if percent_token is None:
             return
-        logger.debug(f"Macro Def Start %" f" (Line {percent_token.line})")
+        logger.debug(f"Macro Def Start % (Line {percent_token.line})")
         # Consume the '%'
         self._advance()
 
         # Parse the macro name.
         if not (self.current_token and self.current_token.type == TOKENTYPE.IDENTIFIER):
-            raise SyntaxError("Expected macro name (IDENTIFIER) after '%'.", token=percent_token)
+            raise SyntaxError(
+                "Expected macro name (IDENTIFIER) after '%'.", token=percent_token
+            )
         macro_name_token = self.current_token
         macro_name = macro_name_token.word
         # Validate macro_name.
         # TODO: More validation. uxnasm.c checks for hex, opcode, rune-start
         # or empty.
         if macro_name in self.macros:
-            raise SyntaxError(f"Duplicate macro definition for '{macro_name}'.", token=percent_token)
+            raise SyntaxError(
+                f"Duplicate macro definition for '{macro_name}'.", token=percent_token
+            )
         if macro_name in self.symbol_table:
             raise SyntaxError(
-                f"Macro name '{macro_name}' (Line {macro_name_token.line}) collides with existing label.",
+                f"Macro name '{macro_name}' (Line {macro_name_token.line}) "
+                "collides with existing label.",
                 token=percent_token,
                 filename=self._cur_ctx_filepath(),
             )
@@ -1775,7 +2089,10 @@ class Parser:
         # Expect and consume opening brace '{'
         if token is None or token.type != TOKENTYPE.RUNE_LBRACE:
             err_token = token if token else macro_name_token
-            raise SyntaxError(f"Expected '{{' to start macro body for '{macro_name}'.", token=err_token)
+            raise SyntaxError(
+                f"Expected '{{' to start macro body for '{macro_name}'.",
+                token=err_token,
+            )
 
         lbrace_token = token
 
@@ -1806,28 +2123,36 @@ class Parser:
         if nesting_depth != 0:
             # We hit EOF or some other issue before closing brace.
             raise SyntaxError(
-                f"Unclosed macro body for '{macro_name}'." f" Expected '}}' to match '{{' on line" f" {lbrace_token.line}",
+                f"Unclosed macro body for '{macro_name}'."
+                f" Expected '}}' to match '{{' on line"
+                f" {lbrace_token.line}",
                 token=lbrace_token,
             )
         # Store the macro
         self.macros[macro_name] = macro_body_tokens
-        logger.debug(f"    Stored macro '{macro_name}' with {len(macro_body_tokens)} tokens in its body.")
+        logger.debug(
+            f"    Stored macro '{macro_name}' with {len(macro_body_tokens)} "
+            "tokens in its body."
+        )
 
         # PC (self.current_address) is NOT advanced for a macro def.
 
     def _handle_macro_invocation(self, macro_name: str, invocation_line: int) -> None:
         """Handle a macro invocation.
 
-        Looks up the macro, saves parser state, processes the macro's tokens,
-        and then restores the state.
+        Look up the macro, save parser state, process the macro tokens,
+        and restore the state.
         """
-        logger.debug(f"  Expanding macro '{macro_name}'(called on line {invocation_line})")
+        logger.debug(
+            f"  Expanding macro '{macro_name}'(called on line {invocation_line})"
+        )
 
         # Prevent infinite recursion.
         if macro_name in self.macro_call_stack:
             cs = self.macro_call_stack
             raise ParsingError(
-                f"Infinite macro recursion detected for macro '{macro_name}'. Call stack: {' -> '.join(cs)} -> {macro_name}",
+                f"Infinite macro recursion detected for macro '{macro_name}'. "
+                f"Call stack: {' -> '.join(cs)} -> {macro_name}",
                 line=invocation_line,
                 filename=self._cur_ctx_filepath(),
             )
@@ -1857,7 +2182,10 @@ class Parser:
 
         try:
             # Set new state for macro expansion
-            logger.debug(f"    -> Entering macro '{macro_name}' context. PC is 0x{self.current_address:04x}")
+            logger.debug(
+                f"    -> Entering macro '{macro_name}' context. "
+                f"PC is 0x{self.current_address:04x}"
+            )
             self.tokens = macro_body_tokens
             self.token_idx = 0
             self.current_token = self.tokens[0]
@@ -1872,21 +2200,26 @@ class Parser:
             self.current_token = original_current_token
 
             self.macro_call_stack.pop()
-            logger.debug(f"    <- Exiting macro '{macro_name}' context.PC is now 0x{self.current_address:04x}")
+            logger.debug(
+                f"    <- Exiting macro '{macro_name}' context. "
+                f"PC is now 0x{self.current_address:04x}"
+            )
 
 
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser()
     parser.add_argument("file", help="tal file to assemble")
-    parser.add_argument("-o", "--output", help="Output file to write", default="output.rom")
+    parser.add_argument(
+        "-o", "--output", help="Output file to write", default="output.rom"
+    )
     parser.add_argument("--debug", help="Set loglevel to DEBUG", action="store_true")
     args = parser.parse_args()
     return args
 
 
-def main() -> int | None:
-    """Handle parsing args and calling assembler."""
+def main() -> int:
+    """Handle parsing args and calling the assembler."""
     args = parse_args()
     if args.debug:
         logger.setLevel(logging.DEBUG)
