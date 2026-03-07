@@ -2024,7 +2024,7 @@ class Parser:
                 if not self.current_scope:
                     raise SyntaxError(
                         f"Sub-label reference '{word}'used"
-                         "outside of a parent '@' scope.",
+                        "outside of a parent '@' scope.",
                         token=id_token,
                     )
                 base_label_name = word[1:]
