@@ -9,10 +9,10 @@ This document tracks planned improvements and features for the `yooxn` project.
 - [x] **Docstring Audit**: Standardize docstrings across all classes and methods (preferring Google style).
 
 ## 2. Testing Expansion
-- [ ] **Parser Pass 1 Unit Tests**: Create `tests/test_parser_pass1.py`.
+- [x] **Parser Pass 1 Unit Tests**: Create `tests/test_parser_pass1.py`.
     - Test label definition and scoping without requiring a full Pass 2 run.
     - Test symbol table population.
-- [ ] **Parser Pass 2 Unit Tests**: Create `tests/test_parser_pass2.py`.
+- [x] **Parser Pass 2 Unit Tests**: Create `tests/test_parser_pass2.py`.
     - Test resolution of absolute vs. relative addresses using pre-constructed IR streams and symbol tables.
 - [ ] **Macro Unit Tests**: Dedicated tests for macro expansion, including:
     - Nested macros.
