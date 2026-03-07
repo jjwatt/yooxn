@@ -59,7 +59,7 @@ check: lint typecheck test
 
 lint:
 	@echo ">> Linting with ruff"
-	@$(RUFF) check src tests
+	@$(RUFF) check --output-format=concise --color=never src tests
 
 typecheck:
 	@echo ">> Type checking with mypy"

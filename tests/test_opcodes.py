@@ -1,3 +1,4 @@
+"""Tests for opcodes."""
 import pytest
 
 from yooxn.yooxnas import get_opcode_byte
@@ -59,4 +60,5 @@ from yooxn.yooxnas import get_opcode_byte
     ("", None),
 ])
 def test_get_opcode_byte(mnemonic, expected):
+    """Test opcode produces expected byte."""
     assert get_opcode_byte(mnemonic) == expected

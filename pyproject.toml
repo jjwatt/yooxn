@@ -35,7 +35,6 @@ target-version = "py313"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "D"]
-ignore = ["D100", "D101", "D102", "D103", "D104", "D105", "D107"] # Temporarily ignore missing docstrings
 
 [tool.ruff.format]
 quote-style = "double"
