@@ -1760,6 +1760,8 @@ class Parser:
         directive_token = self.current_token
         if directive_token is None:
             return
+        # Ensure padding is applied before defining the label address
+        self._ensure_default_start_page()
         # Consume '@'
         self._advance()
         if not (self.current_token and self.current_token.type == TOKENTYPE.IDENTIFIER):
@@ -1792,12 +1794,14 @@ class Parser:
     def _handle_standalone_sub_label(self) -> None:
         """Handle a standalone sub-label definition (e.g., '&loop').
 
-        Defines a label within the current parent scope stored in
+        Define a label within the current parent scope stored in
         self.current_scope.
         """
         ampersand_token = self.current_token
         if ampersand_token is None:
             return
+        # Ensure padding is applied before defining the label address
+        self._ensure_default_start_page()
         # Consume '&'
         self._advance()
 
