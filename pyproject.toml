@@ -33,9 +33,6 @@ show_error_codes = true
 line-length = 88
 target-version = "py313"
 
-[tool.ruff.lint]
-select = ["E", "F", "I", "N", "W", "UP", "B", "D"]
-
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
