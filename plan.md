@@ -14,7 +14,7 @@ This document tracks planned improvements and features for the `yooxn` project.
     - Test symbol table population.
 - [x] **Parser Pass 2 Unit Tests**: Create `tests/test_parser_pass2.py`.
     - Test resolution of absolute vs. relative addresses using pre-constructed IR streams and symbol tables.
-- [ ] **Macro Unit Tests**: Dedicated tests for macro expansion, including:
+- [x] **Macro Unit Tests**: Dedicated tests for macro expansion, including:
     - Nested macros.
     - Recursion detection.
     - Redefinition errors.
