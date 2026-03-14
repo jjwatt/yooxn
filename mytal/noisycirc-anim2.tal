@@ -24,6 +24,7 @@
 @phase3      [ $2 ]
 @phase4      [ $2 ]
 @phase5      [ $2 ]
+@phase6      [ $2 ]
 @pmax        [ $2 ]
 @r1          [ $2 ]  ( pulsed radius scratch )
 @colorframe  [ $2 ]
@@ -74,6 +75,8 @@ BRK
         .phase3 LDZ2 #0006 ADD2 .phase3 STZ2
         .phase4 LDZ2 #000a ADD2 .phase4 STZ2
 	.phase5 LDZ2 #0010 ADD2 .phase5 STZ2
+	( increment outer ring slowly )
+	.phase6 LDZ2 #0001 ADD2 .phase6 STZ2
 	
         .phase1 LDZ2 #0020 ;pulse JSR2 #006e ADD2 .r1 STZ2  ( base 110, pulse ±32 -- reaches edges )
         .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0002 SUB2 .c1 LDZ ;draw-circle JSR2
@@ -110,6 +113,13 @@ BRK
         .cx LDZ2 .cy LDZ2 .r1 LDZ2 #000e SUB2  .c3 LDZ ;draw-circle JSR2
         .cx LDZ2 .cy LDZ2 #0002 .c3 LDZ ;draw-circle JSR2
         .cx LDZ2 .cy LDZ2 #0001 .c3 LDZ ;draw-circle JSR2
+	
+        .phase6 LDZ2 #0010 ;pulse JSR2 #0090 ADD2 .r1 STZ2  ( base 144, pulse ±16 )
+        .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0002 SUB2 .c1 LDZ ;draw-circle JSR2
+        .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0001 SUB2 .c1 LDZ ;draw-circle JSR2
+        .cx LDZ2 .cy LDZ2 .r1 LDZ2              .c1 LDZ ;draw-circle JSR2
+        .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0001 ADD2  .c1 LDZ ;draw-circle JSR2
+        .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0002 ADD2  .c1 LDZ ;draw-circle JSR2
 BRK
 
 		
