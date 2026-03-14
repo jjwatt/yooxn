@@ -1,0 +1,161 @@
+%ABS2  { DUP2 #0f SFT2 EQU #05 JCN #0000 SWP2 SUB2 }
+%LTS2  { #8000 ADD2 SWP2 #8000 ADD2 GTH2 }
+%GTS2  { #8000 ADD2 SWP2 #8000 ADD2 LTH2 }
+%WIDTH  { #0100 }
+%HEIGHT { #00a0 }
+%MOD2   { OVR2 OVR2 DIV2 MUL2 SUB2 }
+
+( devices )
+|00 @System  [ &vector $2 &pad $6 &r $2 &g $2 &b $2 ]
+|10 @Console [ &vector $2 &read $1 &pad $5 &write $1 &error $1 ]
+|20 @Screen  [ &vector $2 &width $2 &height $2 &pad $2 &x $2 &y $2 &addr $2 &pixel $1 &sprite $1 ]
+|c0 @DateTime [ &year $2 &month $1 &day $1 &hour $1 &minute $1 &second $1 &dotw $1 &doty $2 &isdst $1 ]
+
+( zero-page )
+|0000
+@color     [ &byte $1 ]
+@circle    [ &xc $2 &yc $2 &x $2 &y $2 &radius $2 &d $2 ]
+@cx        [ $2 ] ( cached screen center x )
+@cy        [ $2 ] ( cached screen center y )
+@numpoints [ $2 ]
+@framecount [ $2 ]
+
+( program )
+|0100
+	( palette: deep blue theme )
+	#2ce9 .System/r DEO2
+	#01c0 .System/g DEO2
+	#2c25 .System/b DEO2
+
+	( cache screen center )
+	.Screen/width DEI2 #01 SFT2 .cx STZ2
+	.Screen/height DEI2 #01 SFT2 .cy STZ2
+
+	;prng-init JSR2
+	;on-frame .Screen/vector DEO2
+BRK
+	
+@on-frame ( --> )
+	.framecount LDZ2 INC2 .framecount STZ2
+	;frame-seed JSR2
+	;clear-screen JSR2
+	.cx LDZ2 .cy LDZ2 WIDTH #01 SFT2 #01 ;draw-circle JSR2  ( outer ring )
+	.cx LDZ2 .cy LDZ2 WIDTH #02 SFT2 #02 ;draw-circle JSR2  ( mid ring )
+	.cx LDZ2 .cy LDZ2 WIDTH #04 SFT2 #03 ;draw-circle JSR2  ( inner ring )
+	.cx LDZ2 .cy LDZ2 WIDTH #06 SFT2 #02 ;draw-circle JSR2  ( innermost )
+BRK
+
+@draw-circle ( xc yc r color -- )
+	.color STZ
+	.circle/radius STZ2
+	.circle/yc STZ2
+	.circle/xc STZ2
+	#0000 .circle/x STZ2
+	.circle/radius LDZ2 .circle/y STZ2
+	.circle/radius LDZ2 #10 SFT2 .circle/d STZ2
+	;seg JSR2
+	&loop
+		.circle/x LDZ2 INC2 .circle/x STZ2
+		.circle/d LDZ2 #0001 LTS2 ,&else JCN
+			.circle/y LDZ2 #0001 SUB2 .circle/y STZ2
+			.circle/x LDZ2 .circle/y LDZ2 SUB2 #20 SFT2
+			.circle/d LDZ2 ADD2 .circle/d STZ2
+			,&end JMP
+		&else
+			.circle/x LDZ2 #20 SFT2
+			.circle/d LDZ2 ADD2 .circle/d STZ2
+		&end
+		;seg JSR2
+		.circle/y LDZ2 .circle/x LDZ2 #0001 SUB2 GTS2 ,&loop JCN
+	JMP2r
+
+
+@seg ( -- )
+	( get a small signed jitter: prng mod 7, subtract 3 to center around 0 )
+	;prng JSR2 #0007 MOD2 #0003 SUB2  ( jitter: -3 to +3 )
+
+	( apply jitter radially to all 8 octants )
+	( octant 1: (+x, +y) )
+	.circle/xc LDZ2 .circle/x LDZ2 ADD2 OVR2 ADD2 .Screen/x DEO2
+	.circle/yc LDZ2 .circle/y LDZ2 ADD2 OVR2 ADD2 .Screen/y DEO2
+	.color LDZ .Screen/pixel DEO
+
+	( octant 2: (-x, +y) )
+	.circle/xc LDZ2 .circle/x LDZ2 SUB2 OVR2 SUB2 .Screen/x DEO2
+	.circle/yc LDZ2 .circle/y LDZ2 ADD2 OVR2 ADD2 .Screen/y DEO2
+	.color LDZ .Screen/pixel DEO
+
+	( octant 3: (+x, -y) )
+	.circle/xc LDZ2 .circle/x LDZ2 ADD2 OVR2 ADD2 .Screen/x DEO2
+	.circle/yc LDZ2 .circle/y LDZ2 SUB2 OVR2 SUB2 .Screen/y DEO2
+	.color LDZ .Screen/pixel DEO
+
+	( octant 4: (-x, -y) )
+	.circle/xc LDZ2 .circle/x LDZ2 SUB2 OVR2 SUB2 .Screen/x DEO2
+	.circle/yc LDZ2 .circle/y LDZ2 SUB2 OVR2 SUB2 .Screen/y DEO2
+	.color LDZ .Screen/pixel DEO
+
+	( octant 5: (+y, +x) )
+	.circle/xc LDZ2 .circle/y LDZ2 ADD2 OVR2 ADD2 .Screen/x DEO2
+	.circle/yc LDZ2 .circle/x LDZ2 ADD2 OVR2 ADD2 .Screen/y DEO2
+	.color LDZ .Screen/pixel DEO
+
+	( octant 6: (-y, +x) )
+	.circle/xc LDZ2 .circle/y LDZ2 SUB2 OVR2 SUB2 .Screen/x DEO2
+	.circle/yc LDZ2 .circle/x LDZ2 ADD2 OVR2 ADD2 .Screen/y DEO2
+	.color LDZ .Screen/pixel DEO
+
+	( octant 7: (+y, -x) )
+	.circle/xc LDZ2 .circle/y LDZ2 ADD2 OVR2 ADD2 .Screen/x DEO2
+	.circle/yc LDZ2 .circle/x LDZ2 SUB2 OVR2 SUB2 .Screen/y DEO2
+	.color LDZ .Screen/pixel DEO
+
+	( octant 8: (-y, -x) )
+	.circle/xc LDZ2 .circle/y LDZ2 SUB2 OVR2 SUB2 .Screen/x DEO2
+	.circle/yc LDZ2 .circle/x LDZ2 SUB2 OVR2 SUB2 .Screen/y DEO2
+	.color LDZ .Screen/pixel DEO
+
+	POP2 ( drop jitter )
+	JMP2r
+
+@prng-init ( -- )
+	[ LIT2 00 -DateTime/second ] DEI
+		[ LIT2 00 -DateTime/minute ] DEI #60 SFT2 EOR2
+		[ LIT2 00 -DateTime/hour ] DEI #c0 SFT2 EOR2 ,prng/x STR2
+	[ LIT2 00 -DateTime/hour ] DEI #04 SFT2
+		[ LIT2 00 -DateTime/day ] DEI #10 SFT2 EOR2
+		[ LIT2 00 -DateTime/month ] DEI #60 SFT2 EOR2
+		.DateTime/year DEI2 #a0 SFT2 EOR2 ,prng/y STR2
+JMP2r
+
+@prng ( -- number* )
+	[ LIT2 &x $2 ]
+		DUP2 #50 SFT2 EOR2
+		DUP2 #03 SFT2 EOR2
+	[ LIT2 &y $2 ] DUP2 ,&x STR2
+		DUP2 #01 SFT2 EOR2 EOR2
+		,&y STR2k POP
+JMP2r
+
+@frame-seed ( -- )
+	[ LIT2 00 -DateTime/second ] DEI
+		.framecount LDZ #40 SFT2 EOR2
+		[ LIT2 00 -DateTime/minute ] DEI #60 SFT2 EOR2
+		[ LIT2 00 -DateTime/hour ] DEI #c0 SFT2 EOR2
+		,prng/x STR2
+	[ LIT2 00 -DateTime/hour ] DEI #04 SFT2
+		.framecount LDZ #20 SFT2 EOR2
+		[ LIT2 00 -DateTime/day ] DEI #10 SFT2 EOR2
+		[ LIT2 00 -DateTime/month ] DEI #60 SFT2 EOR2
+		.DateTime/year DEI2 #a0 SFT2 EOR2
+		,prng/y STR2
+JMP2r
+
+@clear-screen ( -- )
+	#0000 .Screen/x DEO2
+	#0000 .Screen/y DEO2
+	.Screen/width DEI2 #0001 SUB2 .Screen/x DEO2
+	.Screen/height DEI2 #0001 SUB2 .Screen/y DEO2
+	#4000 .Screen/addr DEO2  ( point to zeroed memory )
+	#85 .Screen/sprite DEO   ( fill mode: 2bpp, fill flag = bit 7 set + auto )
+JMP2r
