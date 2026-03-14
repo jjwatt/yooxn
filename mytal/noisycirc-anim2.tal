@@ -34,16 +34,19 @@
 	;prng-init JSR2
 	;on-frame .Screen/vector DEO2
 BRK
-	
+
 @on-frame ( --> )
 	.framecount LDZ2 INC2 .framecount STZ2
-	;frame-seed JSR2
+
+	( clear )
 	;clear-screen JSR2
-	.cx LDZ2 .cy LDZ2 WIDTH #01 SFT2 #01 ;draw-circle JSR2  ( outer ring )
-	.cx LDZ2 .cy LDZ2 WIDTH #02 SFT2 #02 ;draw-circle JSR2  ( mid ring )
-	.cx LDZ2 .cy LDZ2 WIDTH #04 SFT2 #03 ;draw-circle JSR2  ( inner ring )
-	.cx LDZ2 .cy LDZ2 WIDTH #06 SFT2 #02 ;draw-circle JSR2  ( innermost )
+
+	.cx LDZ2 .cy LDZ2 WIDTH #01 SFT2 #01 ;draw-circle JSR2
+	.cx LDZ2 .cy LDZ2 WIDTH #02 SFT2 #02 ;draw-circle JSR2
+	.cx LDZ2 .cy LDZ2 WIDTH #04 SFT2 #03 ;draw-circle JSR2
+	.cx LDZ2 .cy LDZ2 WIDTH #06 SFT2 #02 ;draw-circle JSR2
 BRK
+		
 
 @draw-circle ( xc yc r color -- )
 	.color STZ
@@ -69,53 +72,55 @@ BRK
 		.circle/y LDZ2 .circle/x LDZ2 #0001 SUB2 GTS2 ,&loop JCN
 	JMP2r
 
-
 @seg ( -- )
-	( get a small signed jitter: prng mod 7, subtract 3 to center around 0 )
-	;prng JSR2 #0007 MOD2 #0003 SUB2  ( jitter: -3 to +3 )
-
-	( apply jitter radially to all 8 octants )
 	( octant 1: (+x, +y) )
+	;prng JSR2 #0007 MOD2 #0003 SUB2
 	.circle/xc LDZ2 .circle/x LDZ2 ADD2 OVR2 ADD2 .Screen/x DEO2
 	.circle/yc LDZ2 .circle/y LDZ2 ADD2 OVR2 ADD2 .Screen/y DEO2
-	.color LDZ .Screen/pixel DEO
+	.color LDZ .Screen/pixel DEO POP2
 
 	( octant 2: (-x, +y) )
+	;prng JSR2 #0007 MOD2 #0003 SUB2
 	.circle/xc LDZ2 .circle/x LDZ2 SUB2 OVR2 SUB2 .Screen/x DEO2
 	.circle/yc LDZ2 .circle/y LDZ2 ADD2 OVR2 ADD2 .Screen/y DEO2
-	.color LDZ .Screen/pixel DEO
+	.color LDZ .Screen/pixel DEO POP2
 
 	( octant 3: (+x, -y) )
+	;prng JSR2 #0007 MOD2 #0003 SUB2
 	.circle/xc LDZ2 .circle/x LDZ2 ADD2 OVR2 ADD2 .Screen/x DEO2
 	.circle/yc LDZ2 .circle/y LDZ2 SUB2 OVR2 SUB2 .Screen/y DEO2
-	.color LDZ .Screen/pixel DEO
+	.color LDZ .Screen/pixel DEO POP2
 
 	( octant 4: (-x, -y) )
+	;prng JSR2 #0007 MOD2 #0003 SUB2
 	.circle/xc LDZ2 .circle/x LDZ2 SUB2 OVR2 SUB2 .Screen/x DEO2
 	.circle/yc LDZ2 .circle/y LDZ2 SUB2 OVR2 SUB2 .Screen/y DEO2
-	.color LDZ .Screen/pixel DEO
+	.color LDZ .Screen/pixel DEO POP2
 
 	( octant 5: (+y, +x) )
+	;prng JSR2 #0007 MOD2 #0003 SUB2
 	.circle/xc LDZ2 .circle/y LDZ2 ADD2 OVR2 ADD2 .Screen/x DEO2
 	.circle/yc LDZ2 .circle/x LDZ2 ADD2 OVR2 ADD2 .Screen/y DEO2
-	.color LDZ .Screen/pixel DEO
+	.color LDZ .Screen/pixel DEO POP2
 
 	( octant 6: (-y, +x) )
+	;prng JSR2 #0007 MOD2 #0003 SUB2
 	.circle/xc LDZ2 .circle/y LDZ2 SUB2 OVR2 SUB2 .Screen/x DEO2
 	.circle/yc LDZ2 .circle/x LDZ2 ADD2 OVR2 ADD2 .Screen/y DEO2
-	.color LDZ .Screen/pixel DEO
+	.color LDZ .Screen/pixel DEO POP2
 
 	( octant 7: (+y, -x) )
+	;prng JSR2 #0007 MOD2 #0003 SUB2
 	.circle/xc LDZ2 .circle/y LDZ2 ADD2 OVR2 ADD2 .Screen/x DEO2
 	.circle/yc LDZ2 .circle/x LDZ2 SUB2 OVR2 SUB2 .Screen/y DEO2
-	.color LDZ .Screen/pixel DEO
+	.color LDZ .Screen/pixel DEO POP2
 
 	( octant 8: (-y, -x) )
+	;prng JSR2 #0007 MOD2 #0003 SUB2
 	.circle/xc LDZ2 .circle/y LDZ2 SUB2 OVR2 SUB2 .Screen/x DEO2
 	.circle/yc LDZ2 .circle/x LDZ2 SUB2 OVR2 SUB2 .Screen/y DEO2
-	.color LDZ .Screen/pixel DEO
+	.color LDZ .Screen/pixel DEO POP2
 
-	POP2 ( drop jitter )
 	JMP2r
 
 @prng-init ( -- )
@@ -137,25 +142,14 @@ JMP2r
 		,&y STR2k POP
 JMP2r
 
-@frame-seed ( -- )
-	[ LIT2 00 -DateTime/second ] DEI
-		.framecount LDZ #40 SFT2 EOR2
-		[ LIT2 00 -DateTime/minute ] DEI #60 SFT2 EOR2
-		[ LIT2 00 -DateTime/hour ] DEI #c0 SFT2 EOR2
-		,prng/x STR2
-	[ LIT2 00 -DateTime/hour ] DEI #04 SFT2
-		.framecount LDZ #20 SFT2 EOR2
-		[ LIT2 00 -DateTime/day ] DEI #10 SFT2 EOR2
-		[ LIT2 00 -DateTime/month ] DEI #60 SFT2 EOR2
-		.DateTime/year DEI2 #a0 SFT2 EOR2
-		,prng/y STR2
-JMP2r
-
 @clear-screen ( -- )
-	#0000 .Screen/x DEO2
 	#0000 .Screen/y DEO2
-	.Screen/width DEI2 #0001 SUB2 .Screen/x DEO2
-	.Screen/height DEI2 #0001 SUB2 .Screen/y DEO2
-	#4000 .Screen/addr DEO2  ( point to zeroed memory )
-	#85 .Screen/sprite DEO   ( fill mode: 2bpp, fill flag = bit 7 set + auto )
+	&yloop
+		#0000 .Screen/x DEO2
+		&xloop
+			#00 .Screen/pixel DEO
+			.Screen/x DEI2 INC2 .Screen/x DEO2
+			.Screen/x DEI2 .Screen/width DEI2 LTH2 ,&xloop JCN
+		.Screen/y DEI2 INC2 .Screen/y DEO2
+		.Screen/y DEI2 .Screen/height DEI2 LTH2 ,&yloop JCN
 JMP2r
