@@ -53,6 +53,7 @@ BRK
         .phase2 LDZ2 #0004 ADD2 .phase2 STZ2
         .phase3 LDZ2 #0006 ADD2 .phase3 STZ2
         .phase4 LDZ2 #000a ADD2 .phase4 STZ2
+	.phase5 LDZ2 #0010 ADD2 .phase5 STZ2
 	
         .phase1 LDZ2 #0020 ;pulse JSR2 #006e ADD2 .r1 STZ2  ( base 110, pulse ±32 -- reaches edges )
         .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0002 SUB2 #01 ;draw-circle JSR2
