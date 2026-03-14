@@ -4,6 +4,7 @@
 %WIDTH  { #0100 }
 %HEIGHT { #00a0 }
 %MOD2   { OVR2 OVR2 DIV2 MUL2 SUB2 }
+%JITTER { ;prng JSR2 NIP .jitter LDZ AND #00 SWP }	
 
 ( devices )
 |00 @System  [ &vector $2 &pad $6 &r $2 &g $2 &b $2 ]
@@ -31,6 +32,8 @@
 @c1          [ $1 ]
 @c2          [ $1 ]
 @c3          [ $1 ]
+@jphase      [ $2 ]
+@jitter      [ $1 ]
 
 	
 ( program )
@@ -77,7 +80,13 @@ BRK
 	.phase5 LDZ2 #0010 ADD2 .phase5 STZ2
 	( increment outer ring slowly )
 	.phase6 LDZ2 #0001 ADD2 .phase6 STZ2
-	
+
+        .jphase LDZ2 #0003 ADD2 .jphase STZ2
+        .jphase LDZ2 #0008 ;pulse JSR2
+        NIP
+        #0f ORA   ( minimum mask of 0x0f instead of 0x07 )
+        .jitter STZ
+		
         .phase1 LDZ2 #0020 ;pulse JSR2 #006e ADD2 .r1 STZ2  ( base 110, pulse ±32 -- reaches edges )
         .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0002 SUB2 .c1 LDZ ;draw-circle JSR2
         .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0001 SUB2 .c1 LDZ ;draw-circle JSR2
@@ -120,6 +129,7 @@ BRK
         .cx LDZ2 .cy LDZ2 .r1 LDZ2              .c1 LDZ ;draw-circle JSR2
         .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0001 ADD2  .c1 LDZ ;draw-circle JSR2
         .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0002 ADD2  .c1 LDZ ;draw-circle JSR2
+
 BRK
 
 		
@@ -149,49 +159,57 @@ BRK
 
 @seg ( -- )
 	( octant 1: (+x, +y) )
-        ;prng JSR2 #0007 MOD2 #0003 SUB2  ( -3 to +3 )
+        ( ;prng JSR2 #0007 MOD2 #0003 SUB2  ( -3 to +3 ) )
+	JITTER
 	.circle/xc LDZ2 .circle/x LDZ2 ADD2 OVR2 ADD2 .Screen/x DEO2
 	.circle/yc LDZ2 .circle/y LDZ2 ADD2 OVR2 ADD2 .Screen/y DEO2
 	.color LDZ .Screen/pixel DEO POP2
 
 	( octant 2: (-x, +y) )
-        ;prng JSR2 #0007 MOD2 #0003 SUB2  ( -3 to +3 )
+        ( ;prng JSR2 #0007 MOD2 #0003 SUB2  ( -3 to +3 ) )
+	JITTER
 	.circle/xc LDZ2 .circle/x LDZ2 SUB2 OVR2 SUB2 .Screen/x DEO2
 	.circle/yc LDZ2 .circle/y LDZ2 ADD2 OVR2 ADD2 .Screen/y DEO2
 	.color LDZ .Screen/pixel DEO POP2
 
 	( octant 3: (+x, -y) )
-        ;prng JSR2 #0007 MOD2 #0003 SUB2  ( -3 to +3 )
+        ( ;prng JSR2 #0007 MOD2 #0003 SUB2  ( -3 to +3 ) )
+	JITTER
 	.circle/xc LDZ2 .circle/x LDZ2 ADD2 OVR2 ADD2 .Screen/x DEO2
 	.circle/yc LDZ2 .circle/y LDZ2 SUB2 OVR2 SUB2 .Screen/y DEO2
 	.color LDZ .Screen/pixel DEO POP2
 
 	( octant 4: (-x, -y) )
-	;prng JSR2 #0007 MOD2 #0003 SUB2
+	( ;prng JSR2 #0007 MOD2 #0003 SUB2 )
+	JITTER
 	.circle/xc LDZ2 .circle/x LDZ2 SUB2 OVR2 SUB2 .Screen/x DEO2
 	.circle/yc LDZ2 .circle/y LDZ2 SUB2 OVR2 SUB2 .Screen/y DEO2
 	.color LDZ .Screen/pixel DEO POP2
 
 	( octant 5: (+y, +x) )
-	;prng JSR2 #0007 MOD2 #0003 SUB2
+	( ;prng JSR2 #0007 MOD2 #0003 SUB2 )
+	JITTER
 	.circle/xc LDZ2 .circle/y LDZ2 ADD2 OVR2 ADD2 .Screen/x DEO2
 	.circle/yc LDZ2 .circle/x LDZ2 ADD2 OVR2 ADD2 .Screen/y DEO2
 	.color LDZ .Screen/pixel DEO POP2
 
 	( octant 6: (-y, +x) )
-	;prng JSR2 #0007 MOD2 #0003 SUB2
+	( ;prng JSR2 #0007 MOD2 #0003 SUB2 )
+	JITTER
 	.circle/xc LDZ2 .circle/y LDZ2 SUB2 OVR2 SUB2 .Screen/x DEO2
 	.circle/yc LDZ2 .circle/x LDZ2 ADD2 OVR2 ADD2 .Screen/y DEO2
 	.color LDZ .Screen/pixel DEO POP2
 
 	( octant 7: (+y, -x) )
-	;prng JSR2 #0007 MOD2 #0003 SUB2
+	( ;prng JSR2 #0007 MOD2 #0003 SUB2 )
+	JITTER
 	.circle/xc LDZ2 .circle/y LDZ2 ADD2 OVR2 ADD2 .Screen/x DEO2
 	.circle/yc LDZ2 .circle/x LDZ2 SUB2 OVR2 SUB2 .Screen/y DEO2
 	.color LDZ .Screen/pixel DEO POP2
 
 	( octant 8: (-y, -x) )
-        ;prng JSR2 #0007 MOD2 #0003 SUB2  ( -7 to +7 )
+        ( ;prng JSR2 #0007 MOD2 #0003 SUB2  ( -7 to +7 ) )
+	JITTER
 	.circle/xc LDZ2 .circle/y LDZ2 SUB2 OVR2 SUB2 .Screen/x DEO2
 	.circle/yc LDZ2 .circle/x LDZ2 SUB2 OVR2 SUB2 .Screen/y DEO2
 	.color LDZ .Screen/pixel DEO POP2
