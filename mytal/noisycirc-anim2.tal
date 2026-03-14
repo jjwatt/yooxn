@@ -23,6 +23,7 @@
 @phase2      [ $2 ]
 @phase3      [ $2 ]
 @phase4      [ $2 ]
+@pmax        [ $2 ]
 
 ( program )
 |0100
@@ -53,10 +54,10 @@ BRK
 	.phase3 LDZ2 #0003 ADD2 .phase3 STZ2
 	.phase4 LDZ2 #0005 ADD2 .phase4 STZ2
 
-	.cx LDZ2 .cy LDZ2 WIDTH #01 SFT2 .phase1 LDZ2 ;pulse JSR2 ADD2 #01 ;draw-circle JSR2
-	.cx LDZ2 .cy LDZ2 WIDTH #02 SFT2 .phase2 LDZ2 ;pulse JSR2 ADD2 #02 ;draw-circle JSR2
-	.cx LDZ2 .cy LDZ2 WIDTH #04 SFT2 .phase3 LDZ2 ;pulse JSR2 ADD2 #03 ;draw-circle JSR2
-	.cx LDZ2 .cy LDZ2 WIDTH #06 SFT2 .phase4 LDZ2 ;pulse JSR2 ADD2 #02 ;draw-circle JSR2
+.cx LDZ2 .cy LDZ2 WIDTH #01 SFT2 .phase1 LDZ2 #0010 ;pulse JSR2 ADD2 #01 ;draw-circle JSR2  ( subtle )
+.cx LDZ2 .cy LDZ2 WIDTH #02 SFT2 .phase2 LDZ2 #0020 ;pulse JSR2 ADD2 #02 ;draw-circle JSR2
+.cx LDZ2 .cy LDZ2 WIDTH #04 SFT2 .phase3 LDZ2 #0040 ;pulse JSR2 ADD2 #03 ;draw-circle JSR2
+.cx LDZ2 .cy LDZ2 WIDTH #06 SFT2 .phase4 LDZ2 #0060 ;pulse JSR2 ADD2 #02 ;draw-circle JSR2  ( dramatic )	
 BRK
 		
 @draw-circle ( xc yc r color -- )
@@ -165,14 +166,13 @@ JMP2r
 		.Screen/y DEI2 .Screen/height DEI2 LTH2 ,&yloop JCN
 JMP2r
 
-@pulse ( phase* -- offset* )
+@pulse ( phase* max* -- offset* )
+	.pmax STZ2
 	#00ff AND2
 	DUP2 #0080 GTH2 ,&down JCN
-		( rising: 0-127 -> 0-10 )
-		#000a MUL2 #007f DIV2
+		.pmax LDZ2 MUL2 #007f DIV2
 		JMP2r
 	&down
-		( falling: 128-255 -> 10-0 )
 		#00ff SWP2 SUB2
-		#000a MUL2 #007f DIV2
+		.pmax LDZ2 MUL2 #007f DIV2
 JMP2r
