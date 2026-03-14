@@ -19,7 +19,10 @@
 @cy          [ $2 ] ( cached screen center y )
 @numpoints   [ $2 ]
 @framecount  [ $2 ]
-@phase       [ $2 ]
+@phase1      [ $2 ]
+@phase2      [ $2 ]
+@phase3      [ $2 ]
+@phase4      [ $2 ]
 
 ( program )
 |0100
@@ -32,9 +35,6 @@
 	.Screen/width DEI2 #01 SFT2 .cx STZ2
 	.Screen/height DEI2 #01 SFT2 .cy STZ2
 
-	( init phase )
-	#0000 .phase STZ2
-
 	( init prng )
 	;prng-init JSR2
 
@@ -42,23 +42,23 @@
 	;on-frame .Screen/vector DEO2
 BRK
 
+
 @on-frame ( --> )
 	.framecount LDZ2 INC2 .framecount STZ2
-
-	( clear )
 	;clear-screen JSR2
 
-        .phase LDZ2 #0002 ADD2 .phase STZ2  ( speed: increase for faster pulse )
+	( advance phases at different speeds )
+	.phase1 LDZ2 #0001 ADD2 .phase1 STZ2
+	.phase2 LDZ2 #0002 ADD2 .phase2 STZ2
+	.phase3 LDZ2 #0003 ADD2 .phase3 STZ2
+	.phase4 LDZ2 #0005 ADD2 .phase4 STZ2
 
-        ;pulse JSR2  ( -- offset )
-        .cx LDZ2 .cy LDZ2 WIDTH #01 SFT2 OVR2 ADD2 #01 ;draw-circle JSR2
-        .cx LDZ2 .cy LDZ2 WIDTH #02 SFT2 OVR2 ADD2 #02 ;draw-circle JSR2
-        .cx LDZ2 .cy LDZ2 WIDTH #04 SFT2 OVR2 ADD2 #03 ;draw-circle JSR2
-        .cx LDZ2 .cy LDZ2 WIDTH #06 SFT2 OVR2 ADD2 #02 ;draw-circle JSR2
-        POP2 ( drop offset )	
+	.cx LDZ2 .cy LDZ2 WIDTH #01 SFT2 .phase1 LDZ2 ;pulse JSR2 ADD2 #01 ;draw-circle JSR2
+	.cx LDZ2 .cy LDZ2 WIDTH #02 SFT2 .phase2 LDZ2 ;pulse JSR2 ADD2 #02 ;draw-circle JSR2
+	.cx LDZ2 .cy LDZ2 WIDTH #04 SFT2 .phase3 LDZ2 ;pulse JSR2 ADD2 #03 ;draw-circle JSR2
+	.cx LDZ2 .cy LDZ2 WIDTH #06 SFT2 .phase4 LDZ2 ;pulse JSR2 ADD2 #02 ;draw-circle JSR2
 BRK
 		
-
 @draw-circle ( xc yc r color -- )
 	.color STZ
 	.circle/radius STZ2
@@ -165,14 +165,14 @@ JMP2r
 		.Screen/y DEI2 .Screen/height DEI2 LTH2 ,&yloop JCN
 JMP2r
 
-@pulse ( -- offset* )
-	.phase LDZ2 #00ff AND2  ( 0-255 triangle phase )
+@pulse ( phase* -- offset* )
+	#00ff AND2
 	DUP2 #0080 GTH2 ,&down JCN
-		( rising half: 0-127 -> 0-20 )
-		#0014 MUL2 #007f DIV2
+		( rising: 0-127 -> 0-10 )
+		#000a MUL2 #007f DIV2
 		JMP2r
 	&down
-		( falling half: 128-255 -> 20-0 )
+		( falling: 128-255 -> 10-0 )
 		#00ff SWP2 SUB2
-		#0014 MUL2 #007f DIV2
+		#000a MUL2 #007f DIV2
 JMP2r
