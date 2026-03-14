@@ -74,49 +74,49 @@ BRK
 
 @seg ( -- )
 	( octant 1: (+x, +y) )
-	;prng JSR2 #0007 MOD2 #0003 SUB2
+	;prng JSR2 #0007 MOD2 #0007 SUB2
 	.circle/xc LDZ2 .circle/x LDZ2 ADD2 OVR2 ADD2 .Screen/x DEO2
 	.circle/yc LDZ2 .circle/y LDZ2 ADD2 OVR2 ADD2 .Screen/y DEO2
 	.color LDZ .Screen/pixel DEO POP2
 
 	( octant 2: (-x, +y) )
-	;prng JSR2 #0007 MOD2 #0003 SUB2
+	;prng JSR2 #0007 MOD2 #0007 SUB2
 	.circle/xc LDZ2 .circle/x LDZ2 SUB2 OVR2 SUB2 .Screen/x DEO2
 	.circle/yc LDZ2 .circle/y LDZ2 ADD2 OVR2 ADD2 .Screen/y DEO2
 	.color LDZ .Screen/pixel DEO POP2
 
 	( octant 3: (+x, -y) )
-	;prng JSR2 #0007 MOD2 #0003 SUB2
+	;prng JSR2 #0007 MOD2 #0007 SUB2
 	.circle/xc LDZ2 .circle/x LDZ2 ADD2 OVR2 ADD2 .Screen/x DEO2
 	.circle/yc LDZ2 .circle/y LDZ2 SUB2 OVR2 SUB2 .Screen/y DEO2
 	.color LDZ .Screen/pixel DEO POP2
 
 	( octant 4: (-x, -y) )
-	;prng JSR2 #0007 MOD2 #0003 SUB2
+	;prng JSR2 #0007 MOD2 #0007 SUB2
 	.circle/xc LDZ2 .circle/x LDZ2 SUB2 OVR2 SUB2 .Screen/x DEO2
 	.circle/yc LDZ2 .circle/y LDZ2 SUB2 OVR2 SUB2 .Screen/y DEO2
 	.color LDZ .Screen/pixel DEO POP2
 
 	( octant 5: (+y, +x) )
-	;prng JSR2 #0007 MOD2 #0003 SUB2
+	;prng JSR2 #0007 MOD2 #0007 SUB2
 	.circle/xc LDZ2 .circle/y LDZ2 ADD2 OVR2 ADD2 .Screen/x DEO2
 	.circle/yc LDZ2 .circle/x LDZ2 ADD2 OVR2 ADD2 .Screen/y DEO2
 	.color LDZ .Screen/pixel DEO POP2
 
 	( octant 6: (-y, +x) )
-	;prng JSR2 #0007 MOD2 #0003 SUB2
+	;prng JSR2 #0007 MOD2 #0007 SUB2
 	.circle/xc LDZ2 .circle/y LDZ2 SUB2 OVR2 SUB2 .Screen/x DEO2
 	.circle/yc LDZ2 .circle/x LDZ2 ADD2 OVR2 ADD2 .Screen/y DEO2
 	.color LDZ .Screen/pixel DEO POP2
 
 	( octant 7: (+y, -x) )
-	;prng JSR2 #0007 MOD2 #0003 SUB2
+	;prng JSR2 #0007 MOD2 #0007 SUB2
 	.circle/xc LDZ2 .circle/y LDZ2 ADD2 OVR2 ADD2 .Screen/x DEO2
 	.circle/yc LDZ2 .circle/x LDZ2 SUB2 OVR2 SUB2 .Screen/y DEO2
 	.color LDZ .Screen/pixel DEO POP2
 
 	( octant 8: (-y, -x) )
-	;prng JSR2 #0007 MOD2 #0003 SUB2
+	;prng JSR2 #0007 MOD2 #0007 SUB2
 	.circle/xc LDZ2 .circle/y LDZ2 SUB2 OVR2 SUB2 .Screen/x DEO2
 	.circle/yc LDZ2 .circle/x LDZ2 SUB2 OVR2 SUB2 .Screen/y DEO2
 	.color LDZ .Screen/pixel DEO POP2
