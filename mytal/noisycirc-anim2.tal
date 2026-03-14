@@ -24,7 +24,8 @@
 @phase3      [ $2 ]
 @phase4      [ $2 ]
 @pmax        [ $2 ]
-
+@r1 [ $2 ]  ( pulsed radius scratch )
+	
 ( program )
 |0100
 	( palette: deep blue theme )
@@ -43,22 +44,40 @@
 	;on-frame .Screen/vector DEO2
 BRK
 
-
 @on-frame ( --> )
 	.framecount LDZ2 INC2 .framecount STZ2
 	;clear-screen JSR2
-
-	( advance phases at different speeds )
+	
 	.phase1 LDZ2 #0001 ADD2 .phase1 STZ2
 	.phase2 LDZ2 #0002 ADD2 .phase2 STZ2
 	.phase3 LDZ2 #0003 ADD2 .phase3 STZ2
 	.phase4 LDZ2 #0005 ADD2 .phase4 STZ2
 
-.cx LDZ2 .cy LDZ2 WIDTH #01 SFT2 .phase1 LDZ2 #0010 ;pulse JSR2 ADD2 #01 ;draw-circle JSR2  ( subtle )
-.cx LDZ2 .cy LDZ2 WIDTH #02 SFT2 .phase2 LDZ2 #0020 ;pulse JSR2 ADD2 #02 ;draw-circle JSR2
-.cx LDZ2 .cy LDZ2 WIDTH #04 SFT2 .phase3 LDZ2 #0040 ;pulse JSR2 ADD2 #03 ;draw-circle JSR2
-.cx LDZ2 .cy LDZ2 WIDTH #06 SFT2 .phase4 LDZ2 #0060 ;pulse JSR2 ADD2 #02 ;draw-circle JSR2  ( dramatic )	
+        ( in on-frame: )
+        .phase1 LDZ2 #000f ;pulse JSR2 #0037 ADD2 .r1 STZ2
+        .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0002 SUB2 #01 ;draw-circle JSR2
+        .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0001 SUB2 #01 ;draw-circle JSR2
+        .cx LDZ2 .cy LDZ2 .r1 LDZ2              #01 ;draw-circle JSR2
+        .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0001 ADD2  #01 ;draw-circle JSR2
+        .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0002 ADD2  #01 ;draw-circle JSR2
+        
+        .phase2 LDZ2 #000c ;pulse JSR2 #0022 ADD2 .r1 STZ2
+        .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0001 SUB2 #02 ;draw-circle JSR2
+        .cx LDZ2 .cy LDZ2 .r1 LDZ2              #02 ;draw-circle JSR2
+        .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0001 ADD2  #02 ;draw-circle JSR2
+        .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0002 ADD2  #02 ;draw-circle JSR2
+        
+        .phase3 LDZ2 #0008 ;pulse JSR2 #0012 ADD2 .r1 STZ2
+        .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0001 SUB2 #03 ;draw-circle JSR2
+        .cx LDZ2 .cy LDZ2 .r1 LDZ2              #03 ;draw-circle JSR2
+        .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0001 ADD2  #03 ;draw-circle JSR2
+        
+        .phase4 LDZ2 #0005 ;pulse JSR2 #0008 ADD2 .r1 STZ2
+        .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0001 SUB2 #02 ;draw-circle JSR2
+        .cx LDZ2 .cy LDZ2 .r1 LDZ2              #02 ;draw-circle JSR2
+        .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0001 ADD2  #02 ;draw-circle JSR2
 BRK
+
 		
 @draw-circle ( xc yc r color -- )
 	.color STZ
