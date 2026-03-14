@@ -41,7 +41,7 @@
 BRK	
 
 @on-frame ( --> )
-	.framecount LDZ INC .framecount STZ
+     .framecount LDZ INC .framecount STZ
 
      ;prng-init JSR2
      ( circle )

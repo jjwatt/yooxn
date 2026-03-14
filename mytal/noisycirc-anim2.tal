@@ -1,0 +1,267 @@
+%ABS2  { DUP2 #0f SFT2 EQU #05 JCN #0000 SWP2 SUB2 }
+%LTS2  { #8000 ADD2 SWP2 #8000 ADD2 GTH2 }
+%GTS2  { #8000 ADD2 SWP2 #8000 ADD2 LTH2 }
+%WIDTH  { #0100 }
+%HEIGHT { #00a0 }
+%MOD2   { OVR2 OVR2 DIV2 MUL2 SUB2 }
+%JITTER { ;prng JSR2 NIP .jitter LDZ AND #00 SWP }	
+
+( devices )
+|00 @System  [ &vector $2 &pad $6 &r $2 &g $2 &b $2 ]
+|10 @Console [ &vector $2 &read $1 &pad $5 &write $1 &error $1 ]
+|20 @Screen  [ &vector $2 &width $2 &height $2 &pad $2 &x $2 &y $2 &addr $2 &pixel $1 &sprite $1 ]
+|c0 @DateTime [ &year $2 &month $1 &day $1 &hour $1 &minute $1 &second $1 &dotw $1 &doty $2 &isdst $1 ]
+
+( zero-page )
+|0000
+@color       [ &byte $1 ]
+@circle      [ &xc $2 &yc $2 &x $2 &y $2 &radius $2 &d $2 ]
+@cx          [ $2 ] ( cached screen center x )
+@cy          [ $2 ] ( cached screen center y )
+@numpoints   [ $2 ]
+@framecount  [ $2 ]
+@phase1      [ $2 ]
+@phase2      [ $2 ]
+@phase3      [ $2 ]
+@phase4      [ $2 ]
+@phase5      [ $2 ]
+@phase6      [ $2 ]
+@pmax        [ $2 ]
+@r1          [ $2 ]  ( pulsed radius scratch )
+@colorframe  [ $2 ]
+@c1          [ $1 ]
+@c2          [ $1 ]
+@c3          [ $1 ]
+@jphase      [ $2 ]
+@jitter      [ $1 ]
+@phasex      [ $2 ]
+@phasey      [ $2 ]
+@dcx         [ $2 ] ( drifted center x )
+@dcy         [ $2 ] ( drifted center y )
+
+( program )
+|0100
+	( palette: deep blue theme )
+	#2ce9 .System/r DEO2
+	#01c0 .System/g DEO2
+	#2c25 .System/b DEO2
+
+	( initialize color vars )
+	#01 .c1 STZ
+	#02 .c2 STZ
+	#03 .c3 STZ
+
+	( cache screen center )
+	.Screen/width DEI2 #01 SFT2 .cx STZ2
+	.Screen/height DEI2 #01 SFT2 .cy STZ2
+
+	( init prng )
+	;prng-init JSR2
+
+	( Set on-frame vector )
+	;on-frame .Screen/vector DEO2
+BRK
+
+@on-frame ( --> )
+        .colorframe LDZ2 INC2 .colorframe STZ2
+        .colorframe LDZ2 NIP  ( keep only low byte )
+        ,&norotate JCN        ( rotate when low byte wraps to zero, every 256 frames )
+        &rotate
+            .c1 LDZ
+            .c2 LDZ .c1 STZ
+            .c3 LDZ .c2 STZ
+            .c3 STZ
+        &norotate
+
+	.phasex LDZ2 #0001 ADD2 .phasex STZ2
+	.phasey LDZ2 #0003 ADD2 .phasey STZ2  ( different speed so x and y drift independently )
+	
+	.framecount LDZ2 INC2 .framecount STZ2
+	;clear-screen JSR2
+
+        .phase1 LDZ2 #0002 ADD2 .phase1 STZ2
+        .phase2 LDZ2 #0004 ADD2 .phase2 STZ2
+        .phase3 LDZ2 #0006 ADD2 .phase3 STZ2
+        .phase4 LDZ2 #000a ADD2 .phase4 STZ2
+	.phase5 LDZ2 #0010 ADD2 .phase5 STZ2
+	( increment outer ring slowly )
+	.phase6 LDZ2 #0001 ADD2 .phase6 STZ2
+
+        .jphase LDZ2 #0003 ADD2 .jphase STZ2
+        .jphase LDZ2 #0004 ;pulse JSR2
+        NIP
+        #0f ORA   ( minimum mask of 0x0f instead of 0x07 )
+        .jitter STZ
+
+        .phasex LDZ2 #0018 ;pulse JSR2 #0010 SUB2 .cx LDZ2 ADD2 .dcx STZ2  ( drift ±8px around cx )
+        .phasey LDZ2 #0018 ;pulse JSR2 #0010 SUB2 .cy LDZ2 ADD2 .dcy STZ2  ( drift ±8px around cy )
+			
+        .phase1 LDZ2 #0020 ;pulse JSR2 #006e ADD2 .r1 STZ2  ( base 110, pulse ±32 -- reaches edges )
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0002 SUB2 .c1 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0001 SUB2 .c1 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2            .c1 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0001 ADD2 .c1 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0002 ADD2 .c1 LDZ ;draw-circle JSR2
+        
+        .phase2 LDZ2 #0018 ;pulse JSR2 #004e ADD2 .r1 STZ2  ( base 78, pulse ±24 )
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0001 SUB2 .c2 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2            .c2 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0001 ADD2 .c2 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0002 ADD2 .c2 LDZ ;draw-circle JSR2
+        
+        .phase3 LDZ2 #0010 ;pulse JSR2 #0030 ADD2 .r1 STZ2  ( base 48, pulse ±16 )
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0001 SUB2 .c3 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2            .c3 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0001 ADD2 .c3 LDZ ;draw-circle JSR2
+        
+        .phase4 LDZ2 #000a ;pulse JSR2 #0016 ADD2 .r1 STZ2  ( base 22, pulse ±10 )
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0001 SUB2 .c2 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2            .c2 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0001 ADD2 .c2 LDZ ;draw-circle JSR2
+
+	.phase5 LDZ2 #0010 ;pulse JSR2 #0030 ADD2 .r1 STZ2
+        ( filled dot: draw circles from 0 up to r1 )
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2             .c3 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0002 SUB2  .c3 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0004 SUB2  .c3 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0006 SUB2  .c3 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0008 SUB2  .c3 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #000a SUB2  .c3 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #000c SUB2  .c3 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #000e SUB2  .c3 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 #0002 .c3 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 #0001 .c3 LDZ ;draw-circle JSR2
+	
+        .phase6 LDZ2 #0010 ;pulse JSR2 #0090 ADD2 .r1 STZ2  ( base 144, pulse ±16 )
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0002 SUB2 .c1 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0001 SUB2 .c1 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2            .c1 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0001 ADD2 .c1 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0002 ADD2 .c1 LDZ ;draw-circle JSR2
+BRK
+
+		
+@draw-circle ( xc yc r color -- )
+	.color STZ
+	.circle/radius STZ2
+	.circle/yc STZ2
+	.circle/xc STZ2
+	#0000 .circle/x STZ2
+	.circle/radius LDZ2 .circle/y STZ2
+	.circle/radius LDZ2 #10 SFT2 .circle/d STZ2
+	;seg JSR2
+	&loop
+		.circle/x LDZ2 INC2 .circle/x STZ2
+		.circle/d LDZ2 #0001 LTS2 ,&else JCN
+			.circle/y LDZ2 #0001 SUB2 .circle/y STZ2
+			.circle/x LDZ2 .circle/y LDZ2 SUB2 #20 SFT2
+			.circle/d LDZ2 ADD2 .circle/d STZ2
+			,&end JMP
+		&else
+			.circle/x LDZ2 #20 SFT2
+			.circle/d LDZ2 ADD2 .circle/d STZ2
+		&end
+		;seg JSR2
+		.circle/y LDZ2 .circle/x LDZ2 #0001 SUB2 GTS2 ,&loop JCN
+	JMP2r
+
+@seg ( -- )
+	( octant 1: (+x, +y) )
+        ( ;prng JSR2 #0007 MOD2 #0003 SUB2  ( -3 to +3 ) )
+	JITTER
+	.circle/xc LDZ2 .circle/x LDZ2 ADD2 OVR2 ADD2 .Screen/x DEO2
+	.circle/yc LDZ2 .circle/y LDZ2 ADD2 OVR2 ADD2 .Screen/y DEO2
+	.color LDZ .Screen/pixel DEO POP2
+
+	( octant 2: (-x, +y) )
+        ( ;prng JSR2 #0007 MOD2 #0003 SUB2  ( -3 to +3 ) )
+	JITTER
+	.circle/xc LDZ2 .circle/x LDZ2 SUB2 OVR2 SUB2 .Screen/x DEO2
+	.circle/yc LDZ2 .circle/y LDZ2 ADD2 OVR2 ADD2 .Screen/y DEO2
+	.color LDZ .Screen/pixel DEO POP2
+
+	( octant 3: (+x, -y) )
+        ( ;prng JSR2 #0007 MOD2 #0003 SUB2  ( -3 to +3 ) )
+	JITTER
+	.circle/xc LDZ2 .circle/x LDZ2 ADD2 OVR2 ADD2 .Screen/x DEO2
+	.circle/yc LDZ2 .circle/y LDZ2 SUB2 OVR2 SUB2 .Screen/y DEO2
+	.color LDZ .Screen/pixel DEO POP2
+
+	( octant 4: (-x, -y) )
+	( ;prng JSR2 #0007 MOD2 #0003 SUB2 )
+	JITTER
+	.circle/xc LDZ2 .circle/x LDZ2 SUB2 OVR2 SUB2 .Screen/x DEO2
+	.circle/yc LDZ2 .circle/y LDZ2 SUB2 OVR2 SUB2 .Screen/y DEO2
+	.color LDZ .Screen/pixel DEO POP2
+
+	( octant 5: (+y, +x) )
+	( ;prng JSR2 #0007 MOD2 #0003 SUB2 )
+	JITTER
+	.circle/xc LDZ2 .circle/y LDZ2 ADD2 OVR2 ADD2 .Screen/x DEO2
+	.circle/yc LDZ2 .circle/x LDZ2 ADD2 OVR2 ADD2 .Screen/y DEO2
+	.color LDZ .Screen/pixel DEO POP2
+
+	( octant 6: (-y, +x) )
+	( ;prng JSR2 #0007 MOD2 #0003 SUB2 )
+	JITTER
+	.circle/xc LDZ2 .circle/y LDZ2 SUB2 OVR2 SUB2 .Screen/x DEO2
+	.circle/yc LDZ2 .circle/x LDZ2 ADD2 OVR2 ADD2 .Screen/y DEO2
+	.color LDZ .Screen/pixel DEO POP2
+
+	( octant 7: (+y, -x) )
+	( ;prng JSR2 #0007 MOD2 #0003 SUB2 )
+	JITTER
+	.circle/xc LDZ2 .circle/y LDZ2 ADD2 OVR2 ADD2 .Screen/x DEO2
+	.circle/yc LDZ2 .circle/x LDZ2 SUB2 OVR2 SUB2 .Screen/y DEO2
+	.color LDZ .Screen/pixel DEO POP2
+
+	( octant 8: (-y, -x) )
+        ( ;prng JSR2 #0007 MOD2 #0003 SUB2  ( -7 to +7 ) )
+	JITTER
+	.circle/xc LDZ2 .circle/y LDZ2 SUB2 OVR2 SUB2 .Screen/x DEO2
+	.circle/yc LDZ2 .circle/x LDZ2 SUB2 OVR2 SUB2 .Screen/y DEO2
+	.color LDZ .Screen/pixel DEO POP2
+
+	JMP2r
+
+@prng-init ( -- )
+	[ LIT2 00 -DateTime/second ] DEI
+		[ LIT2 00 -DateTime/minute ] DEI #60 SFT2 EOR2
+		[ LIT2 00 -DateTime/hour ] DEI #c0 SFT2 EOR2 ,prng/x STR2
+	[ LIT2 00 -DateTime/hour ] DEI #04 SFT2
+		[ LIT2 00 -DateTime/day ] DEI #10 SFT2 EOR2
+		[ LIT2 00 -DateTime/month ] DEI #60 SFT2 EOR2
+		.DateTime/year DEI2 #a0 SFT2 EOR2 ,prng/y STR2
+JMP2r
+
+@prng ( -- number* )
+	[ LIT2 &x $2 ]
+		DUP2 #50 SFT2 EOR2
+		DUP2 #03 SFT2 EOR2
+	[ LIT2 &y $2 ] DUP2 ,&x STR2
+		DUP2 #01 SFT2 EOR2 EOR2
+		,&y STR2k POP
+JMP2r
+
+@clear-screen ( -- )
+	#0000 .Screen/y DEO2
+	&yloop
+		#0000 .Screen/x DEO2
+		&xloop
+			#00 .Screen/pixel DEO
+			.Screen/x DEI2 INC2 .Screen/x DEO2
+			.Screen/x DEI2 .Screen/width DEI2 LTH2 ,&xloop JCN
+		.Screen/y DEI2 INC2 .Screen/y DEO2
+		.Screen/y DEI2 .Screen/height DEI2 LTH2 ,&yloop JCN
+JMP2r
+
+@pulse ( phase* max* -- offset* )
+	.pmax STZ2
+	#00ff AND2
+	DUP2 #0080 GTH2 ,&down JCN
+		.pmax LDZ2 MUL2 #007f DIV2
+		JMP2r
+	&down
+		#00ff SWP2 SUB2
+		.pmax LDZ2 MUL2 #007f DIV2
+JMP2r
