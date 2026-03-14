@@ -75,6 +75,18 @@ BRK
         .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0001 SUB2 #02 ;draw-circle JSR2
         .cx LDZ2 .cy LDZ2 .r1 LDZ2              #02 ;draw-circle JSR2
         .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0001 ADD2  #02 ;draw-circle JSR2
+
+        ( filled dot: draw circles from 0 up to r1 )
+        .cx LDZ2 .cy LDZ2 .r1 LDZ2              #03 ;draw-circle JSR2
+        .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0002 SUB2  #03 ;draw-circle JSR2
+        .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0004 SUB2  #03 ;draw-circle JSR2
+        .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0006 SUB2  #03 ;draw-circle JSR2
+        .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0008 SUB2  #03 ;draw-circle JSR2
+        .cx LDZ2 .cy LDZ2 .r1 LDZ2 #000a SUB2  #03 ;draw-circle JSR2
+        .cx LDZ2 .cy LDZ2 .r1 LDZ2 #000c SUB2  #03 ;draw-circle JSR2
+        .cx LDZ2 .cy LDZ2 .r1 LDZ2 #000e SUB2  #03 ;draw-circle JSR2
+        .cx LDZ2 .cy LDZ2 #0002 #03 ;draw-circle JSR2
+        .cx LDZ2 .cy LDZ2 #0001 #03 ;draw-circle JSR2
 BRK
 
 		
