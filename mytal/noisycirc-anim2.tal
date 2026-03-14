@@ -47,32 +47,31 @@ BRK
 @on-frame ( --> )
 	.framecount LDZ2 INC2 .framecount STZ2
 	;clear-screen JSR2
-	
+
 	.phase1 LDZ2 #0001 ADD2 .phase1 STZ2
 	.phase2 LDZ2 #0002 ADD2 .phase2 STZ2
 	.phase3 LDZ2 #0003 ADD2 .phase3 STZ2
 	.phase4 LDZ2 #0005 ADD2 .phase4 STZ2
 
-        ( in on-frame: )
-        .phase1 LDZ2 #000f ;pulse JSR2 #0037 ADD2 .r1 STZ2
+        .phase1 LDZ2 #0018 ;pulse JSR2 #0050 ADD2 .r1 STZ2  ( base 80, pulse ±24 )
         .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0002 SUB2 #01 ;draw-circle JSR2
         .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0001 SUB2 #01 ;draw-circle JSR2
         .cx LDZ2 .cy LDZ2 .r1 LDZ2              #01 ;draw-circle JSR2
         .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0001 ADD2  #01 ;draw-circle JSR2
         .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0002 ADD2  #01 ;draw-circle JSR2
         
-        .phase2 LDZ2 #000c ;pulse JSR2 #0022 ADD2 .r1 STZ2
+        .phase2 LDZ2 #0012 ;pulse JSR2 #0038 ADD2 .r1 STZ2  ( base 56, pulse ±18 )
         .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0001 SUB2 #02 ;draw-circle JSR2
         .cx LDZ2 .cy LDZ2 .r1 LDZ2              #02 ;draw-circle JSR2
         .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0001 ADD2  #02 ;draw-circle JSR2
         .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0002 ADD2  #02 ;draw-circle JSR2
         
-        .phase3 LDZ2 #0008 ;pulse JSR2 #0012 ADD2 .r1 STZ2
+        .phase3 LDZ2 #000c ;pulse JSR2 #0022 ADD2 .r1 STZ2  ( base 34, pulse ±12 )
         .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0001 SUB2 #03 ;draw-circle JSR2
         .cx LDZ2 .cy LDZ2 .r1 LDZ2              #03 ;draw-circle JSR2
         .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0001 ADD2  #03 ;draw-circle JSR2
         
-        .phase4 LDZ2 #0005 ;pulse JSR2 #0008 ADD2 .r1 STZ2
+        .phase4 LDZ2 #0008 ;pulse JSR2 #0010 ADD2 .r1 STZ2  ( base 16, pulse ±8 )
         .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0001 SUB2 #02 ;draw-circle JSR2
         .cx LDZ2 .cy LDZ2 .r1 LDZ2              #02 ;draw-circle JSR2
         .cx LDZ2 .cy LDZ2 .r1 LDZ2 #0001 ADD2  #02 ;draw-circle JSR2
