@@ -88,13 +88,13 @@ BRK
 	.phase6 LDZ2 #0001 ADD2 .phase6 STZ2
 
         .jphase LDZ2 #0003 ADD2 .jphase STZ2
-        .jphase LDZ2 #0008 ;pulse JSR2
+        .jphase LDZ2 #0004 ;pulse JSR2
         NIP
         #0f ORA   ( minimum mask of 0x0f instead of 0x07 )
         .jitter STZ
 
-        .phasex LDZ2 #0018 ;pulse JSR2 #0008 SUB2 .cx LDZ2 ADD2 .dcx STZ2  ( drift ±8px around cx )
-        .phasey LDZ2 #0018 ;pulse JSR2 #0008 SUB2 .cy LDZ2 ADD2 .dcy STZ2  ( drift ±8px around cy )
+        .phasex LDZ2 #0018 ;pulse JSR2 #0010 SUB2 .cx LDZ2 ADD2 .dcx STZ2  ( drift ±8px around cx )
+        .phasey LDZ2 #0018 ;pulse JSR2 #0010 SUB2 .cy LDZ2 ADD2 .dcy STZ2  ( drift ±8px around cy )
 			
         .phase1 LDZ2 #0020 ;pulse JSR2 #006e ADD2 .r1 STZ2  ( base 110, pulse ±32 -- reaches edges )
         .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0002 SUB2 .c1 LDZ ;draw-circle JSR2
