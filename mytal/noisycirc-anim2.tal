@@ -45,9 +45,14 @@
 ( program )
 |0100
 	( palette: deep blue theme )
-	#2ce9 .System/r DEO2
-	#01c0 .System/g DEO2
-	#2c25 .System/b DEO2
+	( #2ce9 .System/r DEO2 )
+	( #01c0 .System/g DEO2 )
+	( #2c25 .System/b DEO2 )
+
+        ( in |0100 and in @animate-palette base values )
+        #0fa5 .System/r DEO2  ( slot0=0 slot1=f slot2=a slot3=5 )
+        #05a2 .System/g DEO2  ( slot0=0 slot1=5 slot2=a slot3=2 )
+        #0258 .System/b DEO2  ( slot0=0 slot1=2 slot2=5 slot3=8 )
 
 	( initialize color vars )
 	#01 .c1 STZ
@@ -274,8 +279,14 @@ JMP2r
 		.pmax LDZ2 MUL2 #007f DIV2
 JMP2r
 
+( @animate-palette ( -- ) )
+(     .phaser LDZ2 #0020 ;pulse JSR2 #2c00 ADD2 .System/r DEO2 )
+(     .phaseg LDZ2 #0010 ;pulse JSR2 #0100 ADD2 .System/g DEO2 )
+(     .phaseb LDZ2 #0020 ;pulse JSR2 #2500 ADD2 .System/b DEO2 )
+( JMP2r )
+
 @animate-palette ( -- )
-    .phaser LDZ2 #0020 ;pulse JSR2 #2c00 ADD2 .System/r DEO2
-    .phaseg LDZ2 #0010 ;pulse JSR2 #0100 ADD2 .System/g DEO2
-    .phaseb LDZ2 #0020 ;pulse JSR2 #2500 ADD2 .System/b DEO2
+    .phaser LDZ2 #0020 ;pulse JSR2 #0fa5 ADD2 .System/r DEO2
+    .phaseg LDZ2 #0010 ;pulse JSR2 #05a2 ADD2 .System/g DEO2
+    .phaseb LDZ2 #0020 ;pulse JSR2 #0258 ADD2 .System/b DEO2
 JMP2r
