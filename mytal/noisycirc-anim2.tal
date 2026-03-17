@@ -38,6 +38,9 @@
 @phasey      [ $2 ]
 @dcx         [ $2 ] ( drifted center x )
 @dcy         [ $2 ] ( drifted center y )
+@phaser      [ $2 ]
+@phaseg      [ $2 ]
+@phaseb      [ $2 ]
 
 ( program )
 |0100
@@ -63,6 +66,7 @@
 BRK
 
 @on-frame ( --> )
+	( Rotate colors )
         .colorframe LDZ2 INC2 .colorframe STZ2
         .colorframe LDZ2 NIP  ( keep only low byte )
         ,&norotate JCN        ( rotate when low byte wraps to zero, every 256 frames )
@@ -75,9 +79,13 @@ BRK
 
 	.phasex LDZ2 #0001 ADD2 .phasex STZ2
 	.phasey LDZ2 #0003 ADD2 .phasey STZ2  ( different speed so x and y drift independently )
+        .phaser LDZ2 #0001 ADD2 .phaser STZ2
+        .phaseg LDZ2 #0003 ADD2 .phaseg STZ2
+        .phaseb LDZ2 #0002 ADD2 .phaseb STZ2
 	
 	.framecount LDZ2 INC2 .framecount STZ2
 	;clear-screen JSR2
+	;animate-palette JSR2
 
         .phase1 LDZ2 #0002 ADD2 .phase1 STZ2
         .phase2 LDZ2 #0004 ADD2 .phase2 STZ2
@@ -264,4 +272,10 @@ JMP2r
 	&down
 		#00ff SWP2 SUB2
 		.pmax LDZ2 MUL2 #007f DIV2
+JMP2r
+
+@animate-palette ( -- )
+    .phaser LDZ2 #0020 ;pulse JSR2 #2c00 ADD2 .System/r DEO2
+    .phaseg LDZ2 #0010 ;pulse JSR2 #0100 ADD2 .System/g DEO2
+    .phaseb LDZ2 #0020 ;pulse JSR2 #2500 ADD2 .System/b DEO2
 JMP2r
