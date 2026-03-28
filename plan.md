@@ -29,4 +29,3 @@ This document tracks planned improvements and features for the `yooxn` project.
 ## 4. DevOps & Ecosystem
 - [x] **CI Integration**: Add a GitHub Action to run `make test` on every push and pull request.
 - [ ] **PyPI Readiness**: Prepare the package for potential distribution (ensure `description` and `keywords` in `pyproject.toml` are complete).
-- [ ] **Official Autotest Suite**: Integrate the official `uxn` autotests (from `thirdparty/uxn/etc/autotest/`) into the `yooxn` test cycle to ensure bit-perfect compatibility.
