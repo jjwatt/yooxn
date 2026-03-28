@@ -6,7 +6,7 @@ Python tools for the **Uxn** ecosystem.
 
 `yooxnas` is a fast, multi-pass assembler for the `uxntal` language, written in pure Python.
 
-[![CI](https://github.com/jjwatt/yooxn/actions/workflows/ci.yml/badge.svg)](https://github.com/jjwatt/yooxn/actions/workflows/ci.yml)
+[![CI](https://github.com/jjwatt/yooxn/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/jjwatt/yooxn/actions/workflows/ci-cd.yml)
 
 ### Features
 
