@@ -7,8 +7,26 @@ name = "yooxn"
 version = "0.9.0"
 description = "uxntal assembler in Python"
 readme = "README.md"
+authors = [
+    {name = "Jesse Wattenbarger", email = "jesse.j.wattenbarger@gmail.com"}
+]
+license = {text = "GPL-3.0-only"}
+keywords = ["uxn", "uxntal", "assembler", "emulator", "retrocomputing"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Assemblers",
+]
 requires-python = ">=3.13"
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/jjwatt/yooxn"
+Repository = "https://github.com/jjwatt/yooxn"
+Issues = "https://github.com/jjwatt/yooxn/issues"
 
 [project.scripts]
 yooxnas = "yooxn.yooxnas:main"

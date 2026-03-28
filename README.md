@@ -1,34 +1,62 @@
 # yooxn
 
-Python uxntal stuff
+Python tools for the **Uxn** ecosystem.
 
 ## yooxnas
 
-A uxntal assembler written in Python.
+`yooxnas` is a fast, multi-pass assembler for the `uxntal` language, written in pure Python.
 
 [![CI](https://github.com/jjwatt/yooxn/actions/workflows/ci.yml/badge.svg)](https://github.com/jjwatt/yooxn/actions/workflows/ci.yml)
 
-## Installation
+### Features
 
-You can install the package in editable mode:
+- **Multi-pass architecture**: Ensures reliable label resolution and address calculation.
+- **Macro support**: Full support for `uxntal` macros, including nested definitions.
+- **Sub-label scoping**: Standard `@parent` and `&child` scoping rules.
+- **Include system**: Assemble complex projects with multiple source files using `~include`.
+- **Pure Python**: No external dependencies for the assembler itself.
+
+### Installation
+
+You can install `yooxn` via pip:
 
 ```bash
-pip install -e .
+pip install yooxn
 ```
 
-## Usage
+Or using [uv](https://github.com/astral-sh/uv):
 
-After installation, you can run the assembler directly:
+```bash
+uv add yooxn
+```
+
+### Usage
+
+After installation, the `yooxnas` command will be available:
 
 ```bash
 yooxnas file.tal
 ```
 
-Or via `python -m yooxn`:
+By default, it produces `output.rom`. You can specify the output path with `-o`:
 
 ```bash
-python -m yooxn file.tal
+yooxnas -o project.rom main.tal
 ```
+
+You can also run it as a Python module:
+
+```bash
+python -m yooxn main.tal
+```
+
+Or directly with `uv run`:
+
+```bash
+uv run yooxnas file.tal
+```
+
+### CLI Options
 
 ```
 usage: yooxnas [-h] [-o OUTPUT] [--debug] file
@@ -42,4 +70,24 @@ options:
   --debug              Set loglevel to DEBUG
 ```
 
-I've tried it on many examples. It compiles most `tal` files now, even newer ones. Includes are implemented and work, too.
+## Development
+
+`yooxn` uses `uv` for dependency management and `hatchling` as the build backend.
+
+To install in editable mode:
+
+```bash
+pip install -e .
+```
+
+To run tests:
+
+```bash
+pytest
+```
+
+Using `uv`:
+
+```bash
+uv run pytest
+```
