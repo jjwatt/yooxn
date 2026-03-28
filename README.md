@@ -1,4 +1,5 @@
 # yooxn
+[![CI](https://github.com/jjwatt/yooxn/actions/workflows/ci.yml/badge.svg)](https://github.com/jjwatt/yooxn/actions/workflows/ci.yml)
 WIP uxntal stuff
 
 ## Installation
