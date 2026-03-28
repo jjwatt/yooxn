@@ -7,7 +7,7 @@ name = "yooxn"
 version = "0.1.0"
 description = "uxntal assembler in Python"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.13"
 dependencies = []
 
 [project.scripts]
