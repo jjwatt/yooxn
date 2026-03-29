@@ -158,6 +158,7 @@ class Token:
         type: The TOKENTYPE classification of this token.
         word: The literal string extracted from the source.
         line: The 1-based line number where the token was found.
+        column: The 1-based column number where the token was found.
         value: An optional numeric or string value associated with the token
              (e.g., the byte value for an OPCODE).
 
@@ -168,21 +169,23 @@ class Token:
         token_type: TOKENTYPE,
         word: str,
         line: int,
+        column: int,
         value: int | str | None = None,
     ) -> None:
         """Initialize a new Token instance."""
         self.type = token_type
         self.word = word
         self.line = line
+        self.column = column
         self.value = value
 
     def __repr__(self) -> str:
         """Return a developer-friendly string representation of the token."""
-        return f"Token(type={self.type.name}, value={self.value!r})"
+        return f"Token(type={self.type.name}, value={self.value!r}, line={self.line}, column={self.column})"
 
     def __str__(self) -> str:
         """Return a user-friendly string representation of the token."""
-        return f"Token: {self.word} at line {self.line}"
+        return f"Token: {self.word} at line {self.line}, column {self.column}"
 
     def print(self) -> None:
         """Log a detailed debug representation of the token."""
@@ -193,7 +196,7 @@ class Token:
         else:
             value_str = ""
         logger.debug(
-            f"'{self.word}': [TOKEN_{self.type.name}{value_str}] (Line {self.line})"
+            f"'{self.word}': [TOKEN_{self.type.name}{value_str}] (Line {self.line}, Col {self.column})"
         )
 
 
@@ -220,6 +223,7 @@ class Lexer:
         # Start position of the current token being scanned
         self.start = 0
         self.line = 1
+        self.line_start = 0
         self.start_of_word = True
 
     def _is_at_end(self) -> bool:
@@ -257,18 +261,8 @@ class Lexer:
         # After any token is added, we are no longer at the start of a word
         self.start_of_word = False
 
-        # log_parts = [f"Type={token_type.name}", f"Word='{word}'"]
-        # if value is not None:
-        #     if isinstance(value, int):
-        #         log_parts.append(f"Value={value:#04x}")
-        #     elif isinstance(value, str):
-        #         log_parts.append(f"Value='{value}'")
-
-        # log_parts.append(f"Line={self.line}")
-        # log_parts.append(f"Cursor={self.cursor}")
-        # logger.debug(f"LEXER: Creating Token:"
-        #              f" {', '.join(log_parts)}")
-        return Token(token_type, word, self.line, value)
+        column = self.start - self.line_start + 1
+        return Token(token_type, word, self.line, column, value)
 
     def _skip_whitespace_and_comments(self) -> None:
         """Skip over whitespace and nested comment blocks in the source."""
@@ -281,6 +275,7 @@ class Lexer:
                 self.start_of_word = True
                 self.line += 1
                 self._advance()
+                self.line_start = self.cursor
             # Start block comment
             elif char == "(":
                 # When we see the first '(', start a depth counter.
@@ -297,8 +292,18 @@ class Lexer:
                         depth -= 1
                     elif peeked_char == "\n":
                         self.line += 1
+                        # We don't really need to track line_start inside
+                        # comments for the current purpose of tokens, but
+                        # it's good for consistency if we ever care about
+                        # positions within comments.
+                        # Wait, we do care about line_start after the comment ends.
+                        pass
+                    
                     # Consume char and continue looping.
-                    self._advance()
+                    consumed_char = self._advance()
+                    if consumed_char == "\n":
+                        self.line_start = self.cursor
+
                 if depth > 0:
                     # We hit the end of the file before closing comment.
                     raise ParsingError(
@@ -430,7 +435,7 @@ class Lexer:
                 break
             if token.type == TOKENTYPE.ILLEGAL:
                 logger.error(
-                    f"Error: Illegal token '{token.word}'on line '{token.line}'"
+                    f"Error: Illegal token '{token.word}' on line '{token.line}', col '{token.column}'"
                 )
                 # break
         return tokens
@@ -445,6 +450,7 @@ class IRNode:
         address: The memory address where this node's data begins in the ROM.
         size: The total number of bytes this node occupies in the final output.
         source_line: The line number in the source file that generated this node.
+        source_column: The column number in the source file that generated this node.
         source_filepath: The path to the source file that generated this node.
 
     """
@@ -452,6 +458,7 @@ class IRNode:
     address: int
     size: int
     source_line: int
+    source_column: int
     source_filepath: str
 
 
@@ -521,6 +528,7 @@ class ParsingError(Exception):
         self,
         message: str,
         line: int | None = None,
+        column: int | None = None,
         word: str | None = None,
         token: Token | None = None,
         filename: str | Path | None = None,
@@ -528,11 +536,14 @@ class ParsingError(Exception):
         """Initialize a ParsingError."""
         super().__init__(message)
         self.line = line
+        self.column = column
         self.word = word
         self.token = token
         self.filename = filename
         if token and line is None:
             self.line = token.line
+        if token and column is None:
+            self.column = token.column
         if token and word is None:
             self.word = token.word
 
@@ -540,11 +551,10 @@ class ParsingError(Exception):
         """Get string version of a ParsingError."""
         filename = self.filename or ""
         line = self.line or ""
-        word = self.word or ""
-        # I don't have a good way to get the column yet This works in
-        # emacs, though. It will take you to the line in the file.
-        line_info = f"{filename}:{line}:,"
-        word_info = f' Token "{word}"'
+        column = self.column or ""
+        # Precise error reporting (e.g., file.tal:10:15)
+        line_info = f"{filename}:{line}:{column}"
+        word_info = f' Token "{word}"' if (word := self.word) else ""
         return f"{line_info}{word_info}: {super().__str__()}"
 
 
@@ -693,6 +703,7 @@ class Parser:
                         address=self.current_address,
                         size=padding_size,
                         source_line=self.current_token.line,
+                        source_column=self.current_token.column,
                         source_filepath=str(self._cur_ctx_filepath()),
                         target_address=target_address,
                     )
@@ -765,6 +776,7 @@ class Parser:
             raise ParsingError(
                 f"Undefined label '{ir_node.label_name}' referenced.",
                 line=ir_node.source_line,
+                column=ir_node.source_column,
                 filename=ir_node.source_filepath,
             )
 
@@ -801,6 +813,7 @@ class Parser:
                     f"is too far: ({value_to_write} bytes)."
                     " Must be between -128 and 127.",
                     line=ir_node.source_line,
+                    column=ir_node.source_column,
                     filename=ir_node.source_filepath,
                 )
             # For zero-page, check if address is in range.
@@ -812,6 +825,7 @@ class Parser:
                     f"(0x{value_to_write:02x})"
                     " is outside the zero-page (0x00-0xff).",
                     line=ir_node.source_line,
+                    column=ir_node.source_column,
                     filename=ir_node.source_filepath,
                 )
             # Write as a single byte
@@ -854,6 +868,7 @@ class Parser:
                 f"rewind padding directive "
                 " ('|' to a lower address).",
                 line=ir_node.source_line,
+                column=ir_node.source_column,
                 filename=ir_node.source_filepath,
             )
 
@@ -1222,6 +1237,7 @@ class Parser:
                     placeholder_size=placeholder_size,
                     implied_opcode=implied_opcode_byte,
                     source_line=rune_token.line,
+                    source_column=rune_token.column,
                     source_filepath=str(self._cur_ctx_filepath()),
                 )
             )
@@ -1286,6 +1302,7 @@ class Parser:
                     placeholder_size=placeholder_size,
                     implied_opcode=implied_opcode_byte,
                     source_line=rune_token.line,
+                    source_column=rune_token.column,
                     source_filepath=str(self._cur_ctx_filepath()),
                 )
             )
@@ -1366,6 +1383,7 @@ class Parser:
                     ref_type=ref_type,
                     implied_opcode=None,
                     source_line=rune_token.line,
+                    source_column=rune_token.column,
                     source_filepath=str(self._cur_ctx_filepath()),
                     placeholder_size=placeholder_size,
                 )
@@ -1426,6 +1444,7 @@ class Parser:
                     ref_type=ref_type,
                     implied_opcode=None,
                     source_line=rune_token.line,
+                    source_column=rune_token.column,
                     source_filepath=str(self._cur_ctx_filepath()),
                     placeholder_size=placeholder_size,
                 )
@@ -1469,6 +1488,7 @@ class Parser:
                 address=op_addr,
                 size=size,
                 source_line=op_token.line,
+                source_column=op_token.column,
                 source_filepath=str(self._cur_ctx_filepath()),
                 mnemonic=op_token.word,
                 byte_value=op_token.value,
@@ -1508,6 +1528,7 @@ class Parser:
             raise ParsingError(
                 f"Include file not found: '{filepath_str}'",
                 line=include_rune_token.line,
+                column=include_rune_token.column,
                 filename=self._cur_ctx_filepath(),
             ) from e
         logger.debug(f"Lexing included file: {filepath_str}")
@@ -1559,6 +1580,7 @@ class Parser:
                 size=size,
                 byte_values=byte_values,
                 source_line=token.line,
+                source_column=token.column,
                 source_filepath=str(self._cur_ctx_filepath()),
             )
         )
@@ -1623,6 +1645,7 @@ class Parser:
                         address=op_start_addr,
                         size=1,
                         source_line=token.line,
+                        source_column=token.column,
                         source_filepath=str(self._cur_ctx_filepath()),
                         mnemonic="LIT",
                         byte_value=lit_opcode_byte,
@@ -1634,6 +1657,7 @@ class Parser:
                     address=op_start_addr + 1,
                     size=1,
                     source_line=hex_literal.line,
+                    source_column=hex_literal.column,
                     source_filepath=str(self._cur_ctx_filepath()),
                     byte_values=[val_int & 0xFF],
                 )
@@ -1649,6 +1673,7 @@ class Parser:
                         address=op_start_addr,
                         size=1,
                         source_line=token.line,
+                        source_column=token.column,
                         source_filepath=str(self._cur_ctx_filepath()),
                         mnemonic="LIT2",
                         byte_value=lit2_opcode_byte,
@@ -1663,6 +1688,7 @@ class Parser:
                     address=op_start_addr + 1,
                     size=2,
                     source_line=hex_literal.line,
+                    source_column=hex_literal.column,
                     source_filepath=str(self._cur_ctx_filepath()),
                     byte_values=[high_byte, low_byte],
                 )
@@ -1742,6 +1768,7 @@ class Parser:
                     address=self.current_address,
                     size=size,
                     source_line=dollar_token.line,
+                    source_column=dollar_token.column,
                     source_filepath=str(self._cur_ctx_filepath()),
                     byte_values=([0x00] * size),
                 )
@@ -1880,6 +1907,7 @@ class Parser:
                 address=op_addr,
                 size=data_size,
                 source_line=data_token.line,
+                source_column=data_token.column,
                 source_filepath=str(self._cur_ctx_filepath()),
                 byte_values=byte_values,
             )
@@ -1952,7 +1980,7 @@ class Parser:
         op_addr = self.current_address
         if word in self.macros:
             # It's a macro invocation.
-            self._handle_macro_invocation(word, id_token.line)
+            self._handle_macro_invocation(word, id_token.line, id_token.column)
             self._advance()
             return
 
@@ -1995,6 +2023,7 @@ class Parser:
                         address=op_addr,
                         size=size,
                         source_line=id_token.line,
+                        source_column=id_token.column,
                         source_filepath=str(self._cur_ctx_filepath()),
                         label_name=word,
                         ref_type="JSR_REL16_BAREWORD",
@@ -2009,6 +2038,7 @@ class Parser:
                         address=op_addr,
                         size=size,
                         source_line=id_token.line,
+                        source_column=id_token.column,
                         source_filepath=str(self._cur_ctx_filepath()),
                         byte_values=byte_values,
                     )
@@ -2041,6 +2071,7 @@ class Parser:
                     address=op_addr,
                     size=size,
                     source_line=id_token.line,
+                    source_column=id_token.column,
                     source_filepath=str(self._cur_ctx_filepath()),
                     label_name=target_label_name,
                     ref_type="JSR_REL16_BAREWORD",
@@ -2141,14 +2172,16 @@ class Parser:
 
         # PC (self.current_address) is NOT advanced for a macro def.
 
-    def _handle_macro_invocation(self, macro_name: str, invocation_line: int) -> None:
+    def _handle_macro_invocation(
+        self, macro_name: str, invocation_line: int, invocation_column: int
+    ) -> None:
         """Handle a macro invocation.
 
         Look up the macro, save parser state, process the macro tokens,
         and restore the state.
         """
         logger.debug(
-            f"  Expanding macro '{macro_name}'(called on line {invocation_line})"
+            f"  Expanding macro '{macro_name}'(called on line {invocation_line}, col {invocation_column})"
         )
 
         # Prevent infinite recursion.
@@ -2158,6 +2191,7 @@ class Parser:
                 f"Infinite macro recursion detected for macro '{macro_name}'. "
                 f"Call stack: {' -> '.join(cs)} -> {macro_name}",
                 line=invocation_line,
+                column=invocation_column,
                 filename=self._cur_ctx_filepath(),
             )
 

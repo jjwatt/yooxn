@@ -89,3 +89,17 @@ def test_pass1_nested_scopes():
     assert "B/s" in parser.symbol_table
     assert parser.symbol_table["A/s"] == 0x0100
     assert parser.symbol_table["B/s"] == 0x0100
+
+
+def test_pass1_ir_node_column():
+    """Test that IR nodes in Pass 1 have correct column numbers."""
+    source = "  INC  DUP"
+    parser = parse_source(source)
+
+    # INC is at col 3
+    # DUP is at col 8
+    op_nodes = [n for n in parser.ir_stream if isinstance(n, IROpcode)]
+    assert op_nodes[0].mnemonic == "INC"
+    assert op_nodes[0].source_column == 3
+    assert op_nodes[1].mnemonic == "DUP"
+    assert op_nodes[1].source_column == 8
