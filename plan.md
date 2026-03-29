@@ -18,7 +18,7 @@ This document tracks planned improvements and features for the `yooxn` project.
     - Nested macros.
     - Recursion detection.
     - Redefinition errors.
-- [ ] **Error Handling Tests**: Verify that `SyntaxError` and `ParsingError` are raised with correct line numbers and messages for invalid Tal code.
+- [x] **Error Handling Tests**: Verify that `SyntaxError` and `ParsingError` are raised with correct line numbers and messages for invalid Tal code.
 
 ## 3. Assembler Enhancements
 - [x] **Column Tracking**: Update the `Lexer` to track column numbers in addition to line numbers. This will allow for more precise "caret" style error reporting (e.g., `file.tal:10:15`).

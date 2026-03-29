@@ -777,6 +777,7 @@ class Parser:
                 f"Undefined label '{ir_node.label_name}' referenced.",
                 line=ir_node.source_line,
                 column=ir_node.source_column,
+                word=ir_node.label_name,
                 filename=ir_node.source_filepath,
             )
 
