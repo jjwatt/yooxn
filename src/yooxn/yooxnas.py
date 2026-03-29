@@ -57,6 +57,19 @@ _BASE_OPCODES_LIST = [
 _BASE_OPCODE_MAP = {name: i for i, name in enumerate(_BASE_OPCODES_LIST)}
 
 
+def is_hex_digit(char: str) -> bool:
+    """Check if a character is a valid hexadecimal digit."""
+    if not char:
+        return False
+    char_lower = char.lower()
+    return "0" <= char_lower <= "9" or "a" <= char_lower <= "f"
+
+
+def is_purely_hex(word: str) -> bool:
+    """Check if a word consists entirely of hexadecimal digits."""
+    return all(is_hex_digit(char) for char in word)
+
+
 def get_opcode_byte(mnemonic: str) -> int | None:
     """Calculate the 8-bit opcode byte for a given mnemonic.
 
@@ -131,21 +144,14 @@ class TOKENTYPE(Enum):
     RUNE_HASH = auto()
     RUNE_BACKSLASH = auto()
     RUNE_FORWARDSLASH = auto()
-    RUNE_DOUBLE_QUOTE = auto()
     RUNE_PERCENT = auto()
     RUNE_TILDE = auto()
     RUNE_LBRACE = auto()
     RUNE_RBRACE = auto()
     RUNE_LBRACKET = auto()
     RUNE_RBRACKET = auto()
-    LPAREN = auto()
-    RPAREN = auto()
-    HEX_LITERAL = auto()
     IDENTIFIER = auto()
     OPCODE = auto()
-    WHITESPACE = auto()
-    NEWLINE = auto()
-    COMMENT = auto()
     RAW_ASCII_CHUNK = auto()
     EOF = auto()
     ILLEGAL = auto()
@@ -330,13 +336,6 @@ class Lexer:
             ">",
             ".",
         ]
-
-    def _is_hex_digit(self, char: str) -> bool:
-        """Check if a character is a valid hexadecimal digit."""
-        if not char:
-            return False
-        char_lower = char.lower()
-        return "0" <= char_lower <= "9" or "a" <= char_lower <= "f"
 
     def scan_token(self) -> Token:
         """Scan and return the next token from the source."""
@@ -619,24 +618,6 @@ class Parser:
             self.current_token = self.tokens[self.token_idx]
         else:
             self.current_token = None
-
-    def _peek_token(self, offset: int = 1) -> Token | None:
-        """Return a token at a relative offset from the current cursor position."""
-        peek_idx = self.token_idx + offset
-        if 0 <= peek_idx < len(self.tokens):
-            return self.tokens[peek_idx]
-        return None
-
-    def _is_hex_digit(self, char: str) -> bool:
-        """Check if a character is a valid hexadecimal digit."""
-        if not char:
-            return False
-        char_lower = char.lower()
-        return "0" <= char_lower <= "9" or "a" <= char_lower <= "f"
-
-    def _is_purely_hex(self, word: str) -> bool:
-        """Check if a word consists entirely of hexadecimal digits."""
-        return all(self._is_hex_digit(char) for char in word)
 
     def write_rom(self, output_filename: str | Path | None = None) -> None:
         """Write the accumulated ROM data to a file.
@@ -1012,15 +993,6 @@ class Parser:
                     f"Unexpected closing delimiter '{self.current_token.word}'",
                     token=self.current_token,
                 )
-            # Handle delimiters that don't contribute to size but need
-            # to be consumed if not part of a larger structure already
-            case TOKENTYPE.LPAREN | TOKENTYPE.RPAREN:
-                logger.debug(
-                    f"  Skipping Delimiter/Ignored Token: "
-                    f"'{self.current_token.word}' type: {token_type}"
-                    f" (Line {self.current_token.line})"
-                )
-                self._advance()
             case _:
                 self._advance()
                 # This should ideally be an error for unexpected tokens.
@@ -1125,10 +1097,7 @@ class Parser:
 
         if not (
             self.current_token
-            and (
-                self.current_token.type == TOKENTYPE.HEX_LITERAL
-                or self.current_token.type == TOKENTYPE.IDENTIFIER
-            )
+            and self.current_token.type == TOKENTYPE.IDENTIFIER
         ):
             # TODO: looking up label in symbol_table
             raise SyntaxError(
@@ -1269,10 +1238,7 @@ class Parser:
 
             if not (
                 self.current_token
-                and (
-                    self.current_token.type == TOKENTYPE.IDENTIFIER
-                    or self.current_token.type == TOKENTYPE.HEX_LITERAL
-                )
+                and self.current_token.type == TOKENTYPE.IDENTIFIER
             ):
                 raise SyntaxError(
                     f"Expected label name or '{{' after rune '{rune_token.word}'.",
@@ -1412,10 +1378,7 @@ class Parser:
 
             if not (
                 self.current_token
-                and (
-                    self.current_token.type == TOKENTYPE.IDENTIFIER
-                    or self.current_token.type == TOKENTYPE.HEX_LITERAL
-                )
+                and self.current_token.type == TOKENTYPE.IDENTIFIER
             ):
                 raise SyntaxError(
                     f"Expected label name or '{{' after rune '{rune_token.word}'.",
@@ -1607,10 +1570,7 @@ class Parser:
 
         if not (
             self.current_token
-            and (
-                self.current_token.type == TOKENTYPE.HEX_LITERAL
-                or self.current_token.type == TOKENTYPE.IDENTIFIER
-            )
+            and self.current_token.type == TOKENTYPE.IDENTIFIER
         ):
             # TODO: Handle this error properly
             # SyntaxError("Expected hex literal after #", token=token)
@@ -1740,10 +1700,10 @@ class Parser:
             self._advance()
             if not (
                 (t := self.current_token)
-                and (t.type == TOKENTYPE.HEX_LITERAL or t.type == TOKENTYPE.IDENTIFIER)
+                and t.type == TOKENTYPE.IDENTIFIER
             ):
                 raise SyntaxError(
-                    "Expected size (HEX_LITERAL) after '$'", token=dollar_token
+                    "Expected size (IDENTIFIER) after '$'", token=dollar_token
                 )
             size_hex_token = t
             try:
@@ -1948,17 +1908,14 @@ class Parser:
                 break  # Found the end of the block, exit the loop.
 
             # If not the end, it must be a hex literal.
-            if (
-                self.current_token.type == TOKENTYPE.HEX_LITERAL
-                or self.current_token.type == TOKENTYPE.IDENTIFIER
-            ):
+            if self.current_token.type == TOKENTYPE.IDENTIFIER:
                 # Delegate to the existing handler. It will update PC,
                 # generate IR, and advance the token.
                 self._handle_standalone_hex_data()
             else:
                 # If not '}' or a hex literal, it's an error.
                 err_msg = (
-                    "Expected HEX_LITERAL or '}' in raw hex data "
+                    "Expected IDENTIFIER or '}' in raw hex data "
                     f"block, found '{self.current_token.word}'"
                 )
                 raise SyntaxError(err_msg, token=self.current_token)
@@ -1986,7 +1943,7 @@ class Parser:
             return
 
         # Not a macro or opcode
-        elif self._is_purely_hex(word):
+        elif is_purely_hex(word):
             hex_len = len(word)
             byte_values = []
 
