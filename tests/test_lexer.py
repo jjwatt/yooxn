@@ -123,3 +123,23 @@ def test_lexer_whitespace():
     assert token.type == TOKENTYPE.OPCODE
     assert token.word == "DUP"
     assert token.line == 2
+
+
+def test_lexer_column_tracking():
+    """Test lexer column tracking."""
+    lexer = Lexer("  DUP\n  INC  POP")
+    tokens = lexer.scan_all_tokens()
+    # tokens[0] is DUP
+    assert tokens[0].word == "DUP"
+    assert tokens[0].line == 1
+    assert tokens[0].column == 3
+
+    # tokens[1] is INC
+    assert tokens[1].word == "INC"
+    assert tokens[1].line == 2
+    assert tokens[1].column == 3
+
+    # tokens[2] is POP
+    assert tokens[2].word == "POP"
+    assert tokens[2].line == 2
+    assert tokens[2].column == 8
