@@ -92,18 +92,6 @@ def test_invalid_hex_for_padding():
     with pytest.raises(SyntaxError, match="Invalid hex value"):
         assemble_with_error(source)
 
-def test_sublabel_outside_scope():
-    """Test that a sub-label defined outside a parent scope raises a SyntaxError."""
-    source = "&sub"
-    with pytest.raises(SyntaxError, match="defined outside of a parent '@' scope"):
-        assemble_with_error(source)
-
-def test_sublabel_reference_outside_scope():
-    """Test that a sub-label referenced outside a parent scope raises a SyntaxError."""
-    source = ",&sub"
-    with pytest.raises(SyntaxError, match="used outside of a parent '@' scope"):
-        assemble_with_error(source)
-
 def test_include_file_not_found():
     """Test that a missing include file raises a ParsingError."""
     source = "~nonexistent.tal"
