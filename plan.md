@@ -25,6 +25,7 @@ This document tracks planned improvements and features for the `yooxn` project.
 - [ ] **Symbol File Export**: Implement an option to write a `.sym` file (label mapping) alongside the ROM, matching the behavior of the official `uxnasm`.
 - [x] **Redundant Code Removal**: Clean up the `Parser` class to remove unused attributes or methods inherited from earlier drafts.
 - [x] **Performance Profiling**: Audit the multi-pass process for bottlenecks, especially during large file assembly (e.g., `mandelbrot.tal`).
+- [ ] **Add Include Flag**: Add a command line flag to pass an include path where files will be looked for when they're included (in addition to the current behavior of looking relative to the tal file being built).
 
 ## 4. DevOps & Ecosystem
 - [x] **CI Integration**: Add a GitHub Action to run `make test` on every push and pull request.
