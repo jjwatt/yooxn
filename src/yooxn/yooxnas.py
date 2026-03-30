@@ -574,13 +574,17 @@ class Parser:
     """
 
     def __init__(
-        self, tokens: list[Token], cur_filepath: str | Path | None = None
+        self,
+        tokens: list[Token],
+        cur_filepath: str | Path | None = None,
+        include_paths: list[Path] | None = None,
     ) -> None:
         """Initialize a new parser instance.
 
         Args:
             tokens: A list of Token instances provided by the Lexer.
             cur_filepath: The path to the main source file being parsed.
+            include_paths: A list of directories to search for included files.
 
         """
         self.tokens = tokens
@@ -591,6 +595,7 @@ class Parser:
         cur_filepath = Path(cur_filepath) if cur_filepath else Path("unknown_file")
         self.filepath_stack: list[Path] = [cur_filepath]
         self.cur_filepath_str = str(cur_filepath)
+        self.include_paths = include_paths or []
 
         self.symbol_table: dict[str, int] = {}
         self.macros: dict[str, list[Token]] = {}
@@ -1484,6 +1489,14 @@ class Parser:
         current_file_dir = self.filepath_stack[-1].parent
         resolved_path = (current_file_dir / filepath_str).resolve()
 
+        if not resolved_path.exists():
+            # Try searching in include paths
+            for include_dir in self.include_paths:
+                candidate = (include_dir / filepath_str).resolve()
+                if candidate.exists():
+                    resolved_path = candidate
+                    break
+
         # Save the Parser's token processing state
         orig_tokens = self.tokens
         orig_token_idx = self.token_idx
@@ -2208,6 +2221,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "-o", "--output", help="Output file to write", default="output.rom"
     )
+    parser.add_argument(
+        "-I",
+        "--include",
+        help="Add an include path to search for files",
+        action="append",
+        default=[],
+    )
     parser.add_argument("--debug", help="Set loglevel to DEBUG", action="store_true")
     args = parser.parse_args()
     return args
@@ -2221,6 +2241,7 @@ def main() -> int:
         logger.debug("Python v%s.%s.%s", *sys.version_info[:3])
     if args.file:
         file_path = Path(args.file)
+        include_paths = [Path(p) for p in args.include]
         try:
             with open(file_path) as asmfile:
                 source_code = asmfile.read()
@@ -2229,7 +2250,9 @@ def main() -> int:
                 logger.debug("Finished tokenizing.")
 
                 if tokens and tokens[-1].type != TOKENTYPE.ILLEGAL:
-                    parser = Parser(tokens, cur_filepath=file_path)
+                    parser = Parser(
+                        tokens, cur_filepath=file_path, include_paths=include_paths
+                    )
                     ir_stream, symbol_table = parser.parse_pass1()
                     try:
                         parser.parse_pass2(ir_stream, symbol_table)
