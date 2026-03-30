@@ -2,7 +2,6 @@
 
 import subprocess
 import sys
-from pathlib import Path
 
 def test_include_flag(tmp_path):
     """Test that the --include flag correctly searches for files."""
