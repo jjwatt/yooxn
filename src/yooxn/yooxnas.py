@@ -244,7 +244,7 @@ class Lexer:
 
     def _peek(self) -> str:
         """Return the next character without consuming it."""
-        if self._is_at_end():
+        if self.cursor >= self.size:
             return "\0"
         return self.src[self.cursor]
 
@@ -272,15 +272,15 @@ class Lexer:
 
     def _skip_whitespace_and_comments(self) -> None:
         """Skip over whitespace and nested comment blocks in the source."""
-        while not self._is_at_end():
-            char = self._peek()
+        while self.cursor < self.size:
+            char = self.src[self.cursor]
             if char in " \t\r":
                 self.start_of_word = True
-                self._advance()
+                self.cursor += 1
             elif char == "\n":
                 self.start_of_word = True
                 self.line += 1
-                self._advance()
+                self.cursor += 1
                 self.line_start = self.cursor
             # Start block comment
             elif char == "(":
@@ -288,27 +288,24 @@ class Lexer:
                 depth = 1
                 comment_start_line = self.line
                 # Consume initial '('
-                self._advance()
+                self.cursor += 1
 
-                while not self._is_at_end() and depth > 0:
-                    peeked_char = self._peek()
+                while self.cursor < self.size and depth > 0:
+                    peeked_char = self.src[self.cursor]
                     if peeked_char == "(":
                         depth += 1
                     elif peeked_char == ")":
                         depth -= 1
                     elif peeked_char == "\n":
                         self.line += 1
-                        # We don't really need to track line_start inside
-                        # comments for the current purpose of tokens, but
-                        # it's good for consistency if we ever care about
-                        # positions within comments.
-                        # Wait, we do care about line_start after the comment ends.
-                        pass
+                        # We must track line_start correctly within comments
+                        # so that columns after the comment are accurate.
+                        self.cursor += 1
+                        self.line_start = self.cursor
+                        continue
                     
                     # Consume char and continue looping.
-                    consumed_char = self._advance()
-                    if consumed_char == "\n":
-                        self.line_start = self.cursor
+                    self.cursor += 1
 
                 if depth > 0:
                     # We hit the end of the file before closing comment.
@@ -593,6 +590,7 @@ class Parser:
             self.current_token = self.tokens[0]
         cur_filepath = Path(cur_filepath) if cur_filepath else Path("unknown_file")
         self.filepath_stack: list[Path] = [cur_filepath]
+        self.cur_filepath_str = str(cur_filepath)
 
         self.symbol_table: dict[str, int] = {}
         self.macros: dict[str, list[Token]] = {}
@@ -602,7 +600,7 @@ class Parser:
         self.current_address = 0x0000
         self.main_code_block_started = False
         self.rom_data = bytearray()
-        self.current_scope = ""
+        self.current_scope = "on-reset"
 
     def _cur_ctx_filepath(self) -> str | Path:
         """Return the path of the file currently being processed."""
@@ -610,6 +608,10 @@ class Parser:
             return self.filepath_stack[-1]
         else:
             return "unknown_file"
+
+    def _update_ctx_filepath_cache(self) -> None:
+        """Update the cached string representation of the current filepath."""
+        self.cur_filepath_str = str(self._cur_ctx_filepath())
 
     def _advance(self) -> None:
         """Consume the current token and advance the cursor to the next one."""
@@ -685,7 +687,7 @@ class Parser:
                         size=padding_size,
                         source_line=self.current_token.line,
                         source_column=self.current_token.column,
-                        source_filepath=str(self._cur_ctx_filepath()),
+                        source_filepath=self.cur_filepath_str,
                         target_address=target_address,
                     )
                 )
@@ -1208,7 +1210,7 @@ class Parser:
                     implied_opcode=implied_opcode_byte,
                     source_line=rune_token.line,
                     source_column=rune_token.column,
-                    source_filepath=str(self._cur_ctx_filepath()),
+                    source_filepath=self.cur_filepath_str,
                 )
             )
             self.current_address += prefix_operation_size
@@ -1270,7 +1272,7 @@ class Parser:
                     implied_opcode=implied_opcode_byte,
                     source_line=rune_token.line,
                     source_column=rune_token.column,
-                    source_filepath=str(self._cur_ctx_filepath()),
+                    source_filepath=self.cur_filepath_str,
                 )
             )
             displayed_label = base_label_name
@@ -1351,7 +1353,7 @@ class Parser:
                     implied_opcode=None,
                     source_line=rune_token.line,
                     source_column=rune_token.column,
-                    source_filepath=str(self._cur_ctx_filepath()),
+                    source_filepath=self.cur_filepath_str,
                     placeholder_size=placeholder_size,
                 )
             )
@@ -1409,7 +1411,7 @@ class Parser:
                     implied_opcode=None,
                     source_line=rune_token.line,
                     source_column=rune_token.column,
-                    source_filepath=str(self._cur_ctx_filepath()),
+                    source_filepath=self.cur_filepath_str,
                     placeholder_size=placeholder_size,
                 )
             )
@@ -1453,7 +1455,7 @@ class Parser:
                 size=size,
                 source_line=op_token.line,
                 source_column=op_token.column,
-                source_filepath=str(self._cur_ctx_filepath()),
+                source_filepath=self.cur_filepath_str,
                 mnemonic=op_token.word,
                 byte_value=op_token.value,
             )
@@ -1478,33 +1480,38 @@ class Parser:
         # Consume the filepath_str
         self._advance()
 
+        # Resolve path relative to current file
+        current_file_dir = self.filepath_stack[-1].parent
+        resolved_path = (current_file_dir / filepath_str).resolve()
+
         # Save the Parser's token processing state
         orig_tokens = self.tokens
         orig_token_idx = self.token_idx
         orig_current_token = self.current_token
 
-        self.filepath_stack.append(Path(filepath_str))
+        self.filepath_stack.append(resolved_path)
+        self._update_ctx_filepath_cache()
         logger.debug(f"filepath_stack: {self.filepath_stack}")
         try:
-            with open(filepath_str) as inc_file:
+            with open(resolved_path) as inc_file:
                 inc_source = inc_file.read()
         except FileNotFoundError as e:
             raise ParsingError(
-                f"Include file not found: '{filepath_str}'",
+                f"Include file not found: '{filepath_str}' (resolved to '{resolved_path}')",
                 line=include_rune_token.line,
                 column=include_rune_token.column,
                 filename=self._cur_ctx_filepath(),
             ) from e
-        logger.debug(f"Lexing included file: {filepath_str}")
-        inc_lexer = Lexer(inc_source, filename=filepath_str)
+        logger.debug(f"Lexing included file: {resolved_path}")
+        inc_lexer = Lexer(inc_source, filename=resolved_path)
         inc_tokens = inc_lexer.scan_all_tokens()
         if not inc_tokens:
             logger.debug(
-                f"Included file '{filepath_str}' is empty or contains no tokens."
+                f"Included file '{resolved_path}' is empty or contains no tokens."
             )
         logger.debug(
             f"Starting Pass 1 for included file:"
-            f" {filepath_str} PC=0x{self.current_address:04x}"
+            f" {resolved_path} PC=0x{self.current_address:04x}"
         )
         # Set this parser's tokens to included file's tokens
         self.tokens = inc_tokens
@@ -1515,7 +1522,7 @@ class Parser:
         self._process_token_stream()
         logger.debug(
             f"Finished Pass 1 for included file:"
-            f" {filepath_str}"
+            f" {resolved_path}"
             f" PC=0x{self.current_address:04x}"
         )
         # Restore previous state of parser
@@ -1525,6 +1532,7 @@ class Parser:
         # Restore filepath
         # TODO: Make this a fn
         self.filepath_stack.pop()
+        self._update_ctx_filepath_cache()
 
     def _handle_raw_ascii_chunk(self) -> None:
         """Handle RAW_ASCII_CHUNK.
@@ -1545,7 +1553,7 @@ class Parser:
                 byte_values=byte_values,
                 source_line=token.line,
                 source_column=token.column,
-                source_filepath=str(self._cur_ctx_filepath()),
+                source_filepath=self.cur_filepath_str,
             )
         )
         logger.debug(
@@ -1607,7 +1615,7 @@ class Parser:
                         size=1,
                         source_line=token.line,
                         source_column=token.column,
-                        source_filepath=str(self._cur_ctx_filepath()),
+                        source_filepath=self.cur_filepath_str,
                         mnemonic="LIT",
                         byte_value=lit_opcode_byte,
                     )
@@ -1619,7 +1627,7 @@ class Parser:
                     size=1,
                     source_line=hex_literal.line,
                     source_column=hex_literal.column,
-                    source_filepath=str(self._cur_ctx_filepath()),
+                    source_filepath=self.cur_filepath_str,
                     byte_values=[val_int & 0xFF],
                 )
             )
@@ -1635,7 +1643,7 @@ class Parser:
                         size=1,
                         source_line=token.line,
                         source_column=token.column,
-                        source_filepath=str(self._cur_ctx_filepath()),
+                        source_filepath=self.cur_filepath_str,
                         mnemonic="LIT2",
                         byte_value=lit2_opcode_byte,
                     )
@@ -1650,7 +1658,7 @@ class Parser:
                     size=2,
                     source_line=hex_literal.line,
                     source_column=hex_literal.column,
-                    source_filepath=str(self._cur_ctx_filepath()),
+                    source_filepath=self.cur_filepath_str,
                     byte_values=[high_byte, low_byte],
                 )
             )
@@ -1672,26 +1680,23 @@ class Parser:
             return
         # Consume '&'
         self._advance()
-        if not (self.current_token and self.current_token.type == TOKENTYPE.IDENTIFIER):
-            raise SyntaxError(
-                f"Expected sub-label name after '&' for parent '{parent_label_name}'.",
-                token=ampersand_token,
-            )
-        sub_label_token = self.current_token
-        sub_label_name = sub_label_token.word
+
+        sub_label_name = ""
+        if self.current_token and self.current_token.type == TOKENTYPE.IDENTIFIER:
+            sub_label_name = self.current_token.word
+            # Consume sub-label identifier
+            self._advance()
+
         full_sub_label_name = f"{parent_label_name}/{sub_label_name}"
 
         if full_sub_label_name in self.symbol_table:
             logger.warning("Duplicate sub-label: %s", full_sub_label_name)
-            # raise SyntaxError()
         else:
             self.symbol_table[full_sub_label_name] = self.current_address
             logger.debug(
                 f"  Defined sub-label '{full_sub_label_name}'"
                 f" at 0x{self.current_address:04x}"
             )
-        # Consume sub-label identifier
-        self._advance()
 
         # Check for optional $size
         if (tok := self.current_token) and tok.type == TOKENTYPE.RUNE_DOLLAR:
@@ -1713,13 +1718,13 @@ class Parser:
             except ValueError as e:
                 raise SyntaxError(
                     f"Invalid size {size_hex_token.word} "
-                    f"for sub-label {sub_label_token.word}",
+                    f"for sub-label {sub_label_name}",
                     token=size_hex_token,
                 ) from e
             logger.debug(
                 "    Sub-label '%s/%s' field occupies %s byte(s).",
                 parent_label_name,
-                sub_label_token.word,
+                sub_label_name,
                 size,
             )
             logger.debug("       Advancing PC.")
@@ -1730,7 +1735,7 @@ class Parser:
                     size=size,
                     source_line=dollar_token.line,
                     source_column=dollar_token.column,
-                    source_filepath=str(self._cur_ctx_filepath()),
+                    source_filepath=self.cur_filepath_str,
                     byte_values=([0x00] * size),
                 )
             )
@@ -1793,18 +1798,16 @@ class Parser:
         # Consume '&'
         self._advance()
 
-        if not (self.current_token and self.current_token.type == TOKENTYPE.IDENTIFIER):
-            raise SyntaxError(
-                "Expected sub-label name (IDENTIFIER) after standalone '&'.",
-                token=ampersand_token,
-            )
-        sub_label_token = self.current_token
-        sub_label_name = sub_label_token.word
+        sub_label_name = ""
+        if self.current_token and self.current_token.type == TOKENTYPE.IDENTIFIER:
+            sub_label_name = self.current_token.word
+            # Consume sub-label identifier
+            self._advance()
 
         if not self.current_scope:
             raise SyntaxError(
                 f"Sub-label '&{sub_label_name}' defined outside of a parent '@' scope.",
-                token=sub_label_token,
+                token=ampersand_token,
             )
 
         full_sub_label_name = f"{self.current_scope}/{sub_label_name}"
@@ -1812,7 +1815,7 @@ class Parser:
         if full_sub_label_name in self.symbol_table:
             logger.warning(
                 "Duplicate sub-label definition for "
-                f"'{full_sub_label_name}' on line {sub_label_token.line}."
+                f"'{full_sub_label_name}' on line {ampersand_token.line}."
             )
         else:
             self.symbol_table[full_sub_label_name] = self.current_address
@@ -1820,12 +1823,8 @@ class Parser:
                 f"  Defined sub-label"
                 f" '{full_sub_label_name}' at"
                 f" 0x{self.current_address:04x}"
-                f" (Line {sub_label_token.line})"
+                f" (Line {ampersand_token.line})"
             )
-
-        # This directive only defines a label; it has no size itself.
-        # The following instructions will advance the PC.
-        self._advance()
 
     def _handle_standalone_hex_data(self) -> None:
         """Handle raw hex literals.
@@ -1869,7 +1868,7 @@ class Parser:
                 size=data_size,
                 source_line=data_token.line,
                 source_column=data_token.column,
-                source_filepath=str(self._cur_ctx_filepath()),
+                source_filepath=self.cur_filepath_str,
                 byte_values=byte_values,
             )
         )
@@ -1982,7 +1981,7 @@ class Parser:
                         size=size,
                         source_line=id_token.line,
                         source_column=id_token.column,
-                        source_filepath=str(self._cur_ctx_filepath()),
+                        source_filepath=self.cur_filepath_str,
                         label_name=word,
                         ref_type="JSR_REL16_BAREWORD",
                         placeholder_size=2,
@@ -1997,7 +1996,7 @@ class Parser:
                         size=size,
                         source_line=id_token.line,
                         source_column=id_token.column,
-                        source_filepath=str(self._cur_ctx_filepath()),
+                        source_filepath=self.cur_filepath_str,
                         byte_values=byte_values,
                     )
                 )
@@ -2030,7 +2029,7 @@ class Parser:
                     size=size,
                     source_line=id_token.line,
                     source_column=id_token.column,
-                    source_filepath=str(self._cur_ctx_filepath()),
+                    source_filepath=self.cur_filepath_str,
                     label_name=target_label_name,
                     ref_type="JSR_REL16_BAREWORD",
                     placeholder_size=2,
