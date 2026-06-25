@@ -29,9 +29,9 @@
 @pmax        [ $2 ]
 @r1          [ $2 ]  ( pulsed radius scratch )
 @colorframe  [ $2 ]
-@c1          [ $1 ]
-@c2          [ $1 ]
-@c3          [ $1 ]
+@color1      [ $1 ]
+@color2      [ $1 ]
+@color3      [ $1 ]
 @jphase      [ $2 ]
 @jitter      [ $1 ]
 @phasex      [ $2 ]
@@ -55,9 +55,9 @@
         #0258 .System/b DEO2  ( slot0=0 slot1=2 slot2=5 slot3=8 )
 
 	( initialize color vars )
-	#01 .c1 STZ
-	#02 .c2 STZ
-	#03 .c3 STZ
+	#01 .color1 STZ
+	#02 .color2 STZ
+	#03 .color3 STZ
 
 	( cache screen center )
 	.Screen/width DEI2 #01 SFT2 .cx STZ2
@@ -76,10 +76,10 @@ BRK
         .colorframe LDZ2 NIP  ( keep only low byte )
         ,&norotate JCN        ( rotate when low byte wraps to zero, every 256 frames )
         &rotate
-            .c1 LDZ
-            .c2 LDZ .c1 STZ
-            .c3 LDZ .c2 STZ
-            .c3 STZ
+            .color1 LDZ
+            .color2 LDZ .color1 STZ
+            .color3 LDZ .color2 STZ
+            .color3 STZ
         &norotate
 
 	.phasex LDZ2 #0001 ADD2 .phasex STZ2
@@ -110,47 +110,47 @@ BRK
         .phasey LDZ2 #0018 ;pulse JSR2 #0010 SUB2 .cy LDZ2 ADD2 .dcy STZ2  ( drift ±8px around cy )
 			
         .phase1 LDZ2 #0020 ;pulse JSR2 #006e ADD2 .r1 STZ2  ( base 110, pulse ±32 -- reaches edges )
-        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0002 SUB2 .c1 LDZ ;draw-circle JSR2
-        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0001 SUB2 .c1 LDZ ;draw-circle JSR2
-        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2            .c1 LDZ ;draw-circle JSR2
-        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0001 ADD2 .c1 LDZ ;draw-circle JSR2
-        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0002 ADD2 .c1 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0002 SUB2 .color1 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0001 SUB2 .color1 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2            .color1 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0001 ADD2 .color1 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0002 ADD2 .color1 LDZ ;draw-circle JSR2
         
         .phase2 LDZ2 #0018 ;pulse JSR2 #004e ADD2 .r1 STZ2  ( base 78, pulse ±24 )
-        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0001 SUB2 .c2 LDZ ;draw-circle JSR2
-        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2            .c2 LDZ ;draw-circle JSR2
-        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0001 ADD2 .c2 LDZ ;draw-circle JSR2
-        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0002 ADD2 .c2 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0001 SUB2 .color2 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2            .color2 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0001 ADD2 .color2 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0002 ADD2 .color2 LDZ ;draw-circle JSR2
         
         .phase3 LDZ2 #0010 ;pulse JSR2 #0030 ADD2 .r1 STZ2  ( base 48, pulse ±16 )
-        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0001 SUB2 .c3 LDZ ;draw-circle JSR2
-        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2            .c3 LDZ ;draw-circle JSR2
-        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0001 ADD2 .c3 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0001 SUB2 .color3 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2            .color3 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0001 ADD2 .color3 LDZ ;draw-circle JSR2
         
         .phase4 LDZ2 #000a ;pulse JSR2 #0016 ADD2 .r1 STZ2  ( base 22, pulse ±10 )
-        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0001 SUB2 .c2 LDZ ;draw-circle JSR2
-        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2            .c2 LDZ ;draw-circle JSR2
-        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0001 ADD2 .c2 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0001 SUB2 .color2 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2            .color2 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0001 ADD2 .color2 LDZ ;draw-circle JSR2
 
 	.phase5 LDZ2 #0010 ;pulse JSR2 #0030 ADD2 .r1 STZ2
         ( filled dot: draw circles from 0 up to r1 )
-        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2             .c3 LDZ ;draw-circle JSR2
-        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0002 SUB2  .c3 LDZ ;draw-circle JSR2
-        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0004 SUB2  .c3 LDZ ;draw-circle JSR2
-        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0006 SUB2  .c3 LDZ ;draw-circle JSR2
-        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0008 SUB2  .c3 LDZ ;draw-circle JSR2
-        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #000a SUB2  .c3 LDZ ;draw-circle JSR2
-        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #000c SUB2  .c3 LDZ ;draw-circle JSR2
-        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #000e SUB2  .c3 LDZ ;draw-circle JSR2
-        .dcx LDZ2 .dcy LDZ2 #0002 .c3 LDZ ;draw-circle JSR2
-        .dcx LDZ2 .dcy LDZ2 #0001 .c3 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2             .color3 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0002 SUB2  .color3 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0004 SUB2  .color3 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0006 SUB2  .color3 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0008 SUB2  .color3 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #000a SUB2  .color3 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #000c SUB2  .color3 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #000e SUB2  .color3 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 #0002 .color3 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 #0001 .color3 LDZ ;draw-circle JSR2
 	
         .phase6 LDZ2 #0010 ;pulse JSR2 #0090 ADD2 .r1 STZ2  ( base 144, pulse ±16 )
-        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0002 SUB2 .c1 LDZ ;draw-circle JSR2
-        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0001 SUB2 .c1 LDZ ;draw-circle JSR2
-        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2            .c1 LDZ ;draw-circle JSR2
-        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0001 ADD2 .c1 LDZ ;draw-circle JSR2
-        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0002 ADD2 .c1 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0002 SUB2 .color1 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0001 SUB2 .color1 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2            .color1 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0001 ADD2 .color1 LDZ ;draw-circle JSR2
+        .dcx LDZ2 .dcy LDZ2 .r1 LDZ2 #0002 ADD2 .color1 LDZ ;draw-circle JSR2
 BRK
 
 		
